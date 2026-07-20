@@ -1,0 +1,63 @@
+{
+  "name": "dcms-root",
+  "version": "1.0.0",
+  "description": "Dermatology Clinic Management System",
+  "main": "main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "build-win": "electron-builder --win"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "firebase-admin": "^14.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^9.0.3",
+    "puppeteer": "^25.3.0",
+    "sqlite3": "^6.0.1"
+  },
+  "build": {
+    "appId": "com.professors00001.dcms",
+    "productName": "DCMS",
+    "win": {
+      "target": "nsis",
+      "icon": "frontend/public/logo.png"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "PROFESSORS00001",
+        "repo": "dcms"
+      }
+    ],
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "main.js",
+      "backend/**/*",
+      "frontend/dist/**/*",
+      "firebase-service-account.json",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/package.json",
+        "to": "app/backend/package.json"
+      }
+    ]
+  },
+  "devDependencies": {
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "electron-packager": "^17.1.2",
+    "electron-updater": "^6.8.9"
+  }
+}
