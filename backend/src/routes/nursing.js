@@ -53,29 +53,25 @@ router.patch('/treatments/:id', async (req, res) => {
 
 router.get('/logs/:patient_id', async (req, res) => {
   try {
-    const snap = await db.collection('nursing_logs').where('patient_id', '==', String(req.params.patient_id)).get();
-    const results = [];
-    const userCache = {};
+    const [snap, usersSnap] = await Promise.all([
+      db.collection('nursing_logs').where('patient_id', '==', String(req.params.patient_id)).get(),
+      db.collection('users').get()
+    ]);
 
-    for (let doc of snap.docs) {
+    const userMap = {};
+    usersSnap.docs.forEach(doc => {
+      userMap[doc.id] = doc.data().name || 'Unknown Nurse';
+    });
+
+    const results = snap.docs.map(doc => {
       const n = doc.data();
       const nId = String(n.nurse_id);
-
-      let nurse_name = 'Unknown Nurse';
-      if (nId && nId !== 'undefined') {
-        if (!userCache[nId]) {
-          const docRes = await db.collection('users').doc(nId).get();
-          userCache[nId] = docRes.exists ? docRes.data().name : 'Unknown Nurse';
-        }
-        nurse_name = userCache[nId];
-      }
-
-      results.push({
+      return {
         id: doc.id,
         ...n,
-        nurse_name
-      });
-    }
+        nurse_name: userMap[nId] || 'Unknown Nurse'
+      };
+    });
 
     // Sort descending by created_at in memory
     results.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));

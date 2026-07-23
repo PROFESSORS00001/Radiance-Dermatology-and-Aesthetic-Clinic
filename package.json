@@ -1,6 +1,6 @@
 {
   "name": "dcms-root",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Dermatology Clinic Management System",
   "main": "main.js",
   "scripts": {
