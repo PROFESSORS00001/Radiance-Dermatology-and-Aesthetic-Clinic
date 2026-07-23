@@ -1,6 +1,6 @@
 {
   "name": "dcms-root",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Dermatology Clinic Management System",
   "main": "main.js",
   "scripts": {
@@ -21,11 +21,12 @@
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^9.0.3",
     "puppeteer": "^25.3.0",
-    "sqlite3": "^6.0.1"
+    "sqlite3": "^6.0.1",
+    "electron-updater": "^6.8.9"
   },
   "build": {
     "appId": "com.professors00001.dcms",
-    "productName": "DCMS",
+    "productName": "Radiance Derms",
     "win": {
       "target": "nsis",
       "icon": "frontend/public/logo.png"
@@ -42,6 +43,7 @@
     },
     "files": [
       "main.js",
+      "preload.js",
       "backend/**/*",
       "frontend/dist/**/*",
       "firebase-service-account.json",
@@ -57,7 +59,6 @@
   "devDependencies": {
     "electron": "^43.1.1",
     "electron-builder": "^26.15.3",
-    "electron-packager": "^17.1.2",
-    "electron-updater": "^6.8.9"
+    "electron-packager": "^17.1.2"
   }
 }

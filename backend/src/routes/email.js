@@ -25,7 +25,7 @@ router.post('/send-pdf', requireAuth, async (req, res) => {
       }
     });
 
-    const fromName = process.env.SMTP_FROM_NAME || 'DCMS';
+    const fromName = process.env.SMTP_FROM_NAME || 'Radiance Derms';
     const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
 
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {

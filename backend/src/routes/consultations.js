@@ -4,42 +4,35 @@ const db = require('../firebase');
 
 router.get('/', async (req, res) => {
   try {
-    const snap = await db.collection('consultations').orderBy('created_at', 'desc').get();
-    
-    const results = [];
-    const patientCache = {};
-    const userCache = {};
+    const [snap, patientsSnap, usersSnap] = await Promise.all([
+      db.collection('consultations').orderBy('created_at', 'desc').get(),
+      db.collection('patients').get(),
+      db.collection('users').get()
+    ]);
 
-    for (let doc of snap.docs) {
+    const patientMap = {};
+    patientsSnap.docs.forEach(doc => {
+      patientMap[doc.id] = doc.data().name || 'Unknown Patient';
+    });
+
+    const userMap = {};
+    usersSnap.docs.forEach(doc => {
+      userMap[doc.id] = doc.data().name || 'Unknown Doctor';
+    });
+
+    const results = snap.docs.map(doc => {
       const c = doc.data();
       const pId = String(c.patient_id);
       const dId = String(c.doctor_id);
 
-      let pName = 'Unknown Patient';
-      if (pId && pId !== 'undefined') {
-        if (!patientCache[pId]) {
-          const pat = await db.collection('patients').doc(pId).get();
-          patientCache[pId] = pat.exists ? pat.data().name : 'Unknown Patient';
-        }
-        pName = patientCache[pId];
-      }
-
-      let dName = 'Unknown Doctor';
-      if (dId && dId !== 'undefined') {
-        if (!userCache[dId]) {
-          const docRes = await db.collection('users').doc(dId).get();
-          userCache[dId] = docRes.exists ? docRes.data().name : 'Unknown Doctor';
-        }
-        dName = userCache[dId];
-      }
-
-      results.push({
+      return {
         id: doc.id,
         ...c,
-        patient_name: pName,
-        doctor_name: dName
-      });
-    }
+        patient_name: patientMap[pId] || 'Unknown Patient',
+        doctor_name: userMap[dId] || 'Unknown Doctor'
+      };
+    });
+
     res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });

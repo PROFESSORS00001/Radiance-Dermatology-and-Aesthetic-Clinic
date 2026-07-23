@@ -8,7 +8,7 @@ let labCatalog = [];
 let pharmacyInventory = [];
 let treatmentCatalog = [];
 let sysSettings = {};
-window.publicBrand = { clinic_name: 'DCMS', clinic_logo: '' };
+window.publicBrand = { clinic_name: 'Radiance Derms', clinic_logo: '' };
 
 window.showModal = function(contentHtml) {
   closeModal();
@@ -54,7 +54,7 @@ async function apiFetch(endpoint, options = {}) {
 const appRoot = document.getElementById('app');
 
 function renderLogin() {
-  const brandName = window.publicBrand.clinic_name || 'DCMS';
+  const brandName = window.publicBrand.clinic_name || 'Radiance Derms';
   
   let brandLockup = '';
   if (window.publicBrand.clinic_logo) {
@@ -82,15 +82,32 @@ function renderLogin() {
             <label>Email</label>
             <input type="email" id="email" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');" required />
           </div>
-          <div class="form-group">
+          <div class="form-group" style="position:relative;">
             <label>Password</label>
-            <input type="password" id="password" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');" required />
+            <input type="password" id="password" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');" required style="padding-right:2.5rem;" />
+            <span id="togglePassword" style="position:absolute; right:12px; top:38px; cursor:pointer; color:#94a3b8; font-size:1.2rem; user-select:none;" title="Show/Hide Password">
+              <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </span>
           </div>
           <button type="submit" class="btn btn-block">Sign In</button>
         </form>
       </div>
     </div>
   `;
+  document.getElementById('togglePassword').addEventListener('click', function() {
+    const pwField = document.getElementById('password');
+    const eyeIcon = document.getElementById('eyeIcon');
+    if (pwField.type === 'password') {
+      pwField.type = 'text';
+      eyeIcon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+    } else {
+      pwField.type = 'password';
+      eyeIcon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+    }
+  });
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -119,7 +136,7 @@ function renderLayout() {
         
         <div class="sidebar-header" style="padding:1.5rem 1.5rem 1rem 1.5rem; background: #ffffff; text-align:center; display:flex; flex-direction:column; align-items:center;">
           ${window.publicBrand.clinic_logo ? `<img src="${window.publicBrand.clinic_logo}" class="sidebar-logo-image" style="width: 100%; max-width: 170px; max-height: 90px; object-fit: contain; mix-blend-mode: multiply; margin-bottom: 0.5rem; transition:all 0.3s;">` : `<div class="sidebar-logo-icon" style="width:70px; height:70px; border-radius:50%; background:linear-gradient(135deg, #0ea5e9, #2563eb); display:flex; align-items:center; justify-content:center; color:white; font-size:2rem; margin-bottom:0.5rem; box-shadow:0 10px 20px rgba(37, 99, 235, 0.2); transition:all 0.3s;">🏥</div>`}
-          <h2 class="sidebar-clinic-name" style="font-size:0.95rem; margin:0; font-weight:800; letter-spacing:0.5px; color:#0f172a; text-transform:uppercase; line-height:1.3; margin-bottom:0.5rem; transition:all 0.3s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">${window.publicBrand.clinic_name || 'DCMS'}</h2>
+          <h2 class="sidebar-clinic-name" style="font-size:0.95rem; margin:0; font-weight:800; letter-spacing:0.5px; color:#0f172a; text-transform:uppercase; line-height:1.3; margin-bottom:0.5rem; transition:all 0.3s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">${window.publicBrand.clinic_name || 'Radiance Derms'}</h2>
           <div id="networkStatusBadge" style="cursor:help; font-size:0.65rem; font-weight:800; letter-spacing:1px; background: #ecfdf5; color:#059669; padding: 4px 10px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #a7f3d0; transition:all 0.3s; white-space:nowrap;" title="Checking Network..."><i class="fas fa-wifi" id="networkWifiIcon"></i> <span id="networkStatusText" class="status-text">ONLINE</span></div>
         </div>
           
@@ -155,7 +172,7 @@ function renderLayout() {
   if(r==='Admin' || r==='Receptionist') navHTML += `<div class="nav-label">Front Desk</div><button class="nav-item" onclick="nav('reception')" data-tooltip="Appointments"><i class="fas fa-calendar-check nav-icon"></i> <span class="nav-text">Appointments</span></button>`;
   if(r==='Admin' || r==='Doctor') navHTML += `<div class="nav-label">Clinical</div><button class="nav-item" onclick="nav('doctor')" data-tooltip="Doctor Dashboard"><i class="fas fa-user-md nav-icon"></i> <span class="nav-text">Doctor Dashboard</span></button>`;
   if(r==='Admin' || r==='Lab Scientist') navHTML += `<div class="nav-label">Laboratory</div><button class="nav-item" onclick="nav('lab')" data-tooltip="Lab Dashboard"><i class="fas fa-flask nav-icon"></i> <span class="nav-text">Lab Dashboard</span></button>`;
-  if(r==='Admin' || r==='Pharmacy') navHTML += `<div class="nav-label">Pharmacy</div><button class="nav-item" onclick="nav('pharmacy')" data-tooltip="Pharmacy Dashboard"><i class="fas fa-pills nav-icon"></i> <span class="nav-text">Pharmacy Dashboard</span></button>`;
+  if(r==='Admin' || r==='Pharmacy' || r==='Receptionist') navHTML += `<div class="nav-label">Pharmacy</div><button class="nav-item" onclick="nav('pharmacy')" data-tooltip="Pharmacy Dashboard"><i class="fas fa-pills nav-icon"></i> <span class="nav-text">Pharmacy Dashboard</span></button>`;
   if(r==='Admin' || r==='Nurse') navHTML += `<div class="nav-label">Nursing</div><button class="nav-item" onclick="nav('nurse')" data-tooltip="Nursing Dashboard"><i class="fas fa-user-nurse nav-icon"></i> <span class="nav-text">Nursing Dashboard</span></button>`;
   if(r==='Admin' || r==='Receptionist') navHTML += `<div class="nav-label">Finance</div><button class="nav-item" onclick="nav('billing')" data-tooltip="Billing & Checkout"><i class="fas fa-file-invoice-dollar nav-icon"></i> <span class="nav-text">Billing & Checkout</span></button>`;
   
@@ -458,7 +475,7 @@ function renderAdminSettings(container) {
         <div class="form-grid" style="flex:1; min-width:300px;">
           <div class="form-group">
             <label style="color:#475569; font-weight:500;">Clinic Name</label>
-            <input type="text" id="admClinicName" value="${sysSettings.clinic_name || 'DCMS Skin Clinic'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
+            <input type="text" id="admClinicName" value="${sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
           </div>
           <div class="form-group">
             <label style="color:#475569; font-weight:500;">Clinic Contact</label>
@@ -492,6 +509,22 @@ function renderAdminSettings(container) {
         <button class="btn" style="background:#f1f5f9; color:#1e293b; border:1px solid #cbd5e1;" onclick="editCatalog('treatment_catalog')"><i class="fas fa-hand-holding-medical"></i> Edit Treatments</button>
       </div>
     </div>
+
+      <div class="card" style="margin-top:1.5rem; padding:2rem;">
+        <h3 style="margin-bottom:1.5rem; color:#1e293b; font-size:1.1rem; font-weight:600;"><i class="fas fa-download" style="color:#3b82f6; margin-right:8px;"></i>Software Update</h3>
+        <div style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap;">
+          <div style="flex:1; min-width:250px;">
+            <p style="color:#475569; margin-bottom:0.5rem; font-size:0.95rem;">Current Version: <strong id="appVersionDisplay">1.0.0</strong></p>
+            <p id="updateStatusText" style="color:#64748b; font-size:0.85rem; margin:0;">Click the button to check for the latest version.</p>
+            <div id="updateProgressContainer" style="display:none; margin-top:0.75rem; width:100%; background:#e2e8f0; border-radius:6px; height:10px; overflow:hidden;">
+              <div id="updateProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg, #3b82f6, #2563eb); transition:width 0.2s ease;"></div>
+            </div>
+          </div>
+          <button id="checkUpdateBtn" class="btn" style="background:linear-gradient(135deg, #3b82f6, #2563eb); color:white; padding:0.75rem 1.5rem; border:none; border-radius:8px; cursor:pointer; font-weight:500;" onclick="checkForAppUpdates()">
+            <i class="fas fa-sync-alt" style="margin-right:6px;"></i>Check for Updates
+          </button>
+        </div>
+      </div>
 
       <div style="margin-top:3rem; padding:2rem; border-radius:12px; border:1px solid #fee2e2; background:#fef2f2;">
         <h3 style="color:#dc2626; margin-bottom:1rem; font-weight:600;"><i class="fas fa-exclamation-triangle"></i> Danger Zone: System Purge</h3>
@@ -617,40 +650,60 @@ window.delUser = async function(id) {
     toast("User deleted"); renderAdmin(document.getElementById('mainContent'));
   } catch(err) { toast(err.message); }
 }
+window.receptionTab = window.receptionTab || 'appointments';
+
 function renderReception(page) {
   const apps = allAppointments.filter(a => a.status !== 'Completed' && a.status !== 'Cancelled');
   const fee = sysSettings.consultation_fee || 150000;
   
   page.innerHTML = `
-    <div class="page-header">
-      <div><div class="page-title">Appointments & Reception</div></div>
-      <button class="btn" onclick="openBookAppointmentModal()">+ Book Appointment</button>
-    </div>
-    <div class="card">
-      <h3>Upcoming Appointments</h3>
-      <div class="table-wrap" style="margin-top:1rem;">
-        <table>
-          <thead><tr><th>Date & Time</th><th>Patient</th><th>Doctor</th><th>Purpose</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>
-            ${apps.map(a => `<tr>
-              <td>${a.date} <br><small style="color:#64748b;">${a.time}</small></td>
-              <td><strong>${a.patient_name}</strong></td>
-              <td>${a.doctor_name || 'Any'}</td>
-              <td>${a.purpose}</td>
-              <td><span class="status-badge" style="background:${a.status==='Approved'?'#d1fae5':a.status==='Rescheduled'?'#e0e7ff':'#fef3c7'}; color:${a.status==='Approved'?'#065f46':a.status==='Rescheduled'?'#3730a3':'#92400e'};">${a.status}</span></td>
-              <td>
-                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                  <button class="btn btn-sm btn-secondary" onclick="printBookingReceipt('${a.patient_id}', '${a.date}', ${fee})">Print Receipt</button>
-                </div>
-              </td>
-            </tr>`).join('')}
-            ${apps.length===0?'<tr><td colspan="6" style="text-align:center; padding:2rem;">No upcoming appointments</td></tr>':''}
-          </tbody>
-        </table>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+      <div style="display:flex; gap:0.5rem; background:#e2e8f0; padding:4px; border-radius:10px;">
+        <button class="btn ${window.receptionTab==='appointments'?'btn-primary':'btn-secondary'}" onclick="setReceptionTab('appointments')" style="border-radius:8px; padding:0.5rem 1.25rem;"><i class="fas fa-calendar-check" style="margin-right:6px;"></i>Appointments & Reception</button>
+        <button class="btn ${window.receptionTab==='pharmacy'?'btn-primary':'btn-secondary'}" onclick="setReceptionTab('pharmacy')" style="border-radius:8px; padding:0.5rem 1.25rem;"><i class="fas fa-pills" style="margin-right:6px;"></i>Pharmacy Dashboard</button>
       </div>
+      ${window.receptionTab==='appointments' ? `<button class="btn" onclick="openBookAppointmentModal()">+ Book Appointment</button>` : ''}
     </div>
+
+    <div id="receptionTabContent"></div>
   `;
+
+  const container = document.getElementById('receptionTabContent');
+  if (window.receptionTab === 'pharmacy') {
+    renderPharmacy(container);
+  } else {
+    container.innerHTML = `
+      <div class="card">
+        <h3>Upcoming Appointments</h3>
+        <div class="table-wrap" style="margin-top:1rem;">
+          <table>
+            <thead><tr><th>Date & Time</th><th>Patient</th><th>Doctor</th><th>Purpose</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${apps.map(a => `<tr>
+                <td>${a.date} <br><small style="color:#64748b;">${a.time}</small></td>
+                <td><strong>${a.patient_name}</strong></td>
+                <td>${a.doctor_name || 'Any'}</td>
+                <td>${a.purpose}</td>
+                <td><span class="status-badge" style="background:${a.status==='Approved'?'#d1fae5':a.status==='Rescheduled'?'#e0e7ff':'#fef3c7'}; color:${a.status==='Approved'?'#065f46':a.status==='Rescheduled'?'#3730a3':'#92400e'};">${a.status}</span></td>
+                <td>
+                  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-secondary" onclick="printBookingReceipt('${a.patient_id}', '${a.date}', ${fee})">Print Receipt</button>
+                  </div>
+                </td>
+              </tr>`).join('')}
+              ${apps.length===0?'<tr><td colspan="6" style="text-align:center; padding:2rem;">No upcoming appointments</td></tr>':''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
 }
+
+window.setReceptionTab = function(tab) {
+  window.receptionTab = tab;
+  renderReception(document.getElementById('mainContent'));
+};
 
 window.openBookAppointmentModal = function() {
   const patOpts = allPatients.map(p => `<option value="${p.id}">[${p.id}] ${p.name} (${p.phone})</option>`).join('');
@@ -766,7 +819,7 @@ window.generatePdfBase64 = function(htmlContent) {
 window.buildPrescriptionHTML = function(myRx) {
   const pName = myRx[0].patient_name;
   const dName = myRx[0].doctor_name;
-  const cName = sysSettings.clinic_name || 'DCMS Skin Clinic';
+  const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
   const cAdd = sysSettings.clinic_address || '123 Health Ave, Freetown';
   const cContact = sysSettings.clinic_contact || '+232 77 123 456';
   const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
@@ -810,7 +863,7 @@ window.buildPrescriptionHTML = function(myRx) {
 
 window.buildBookingReceiptHTML = function(patId, date, fee) {
   const p = allPatients.find(x=>x.id == patId);
-  const cName = sysSettings.clinic_name || 'DCMS Skin Clinic';
+  const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
   const cAdd = sysSettings.clinic_address || '123 Health Ave, Freetown';
   const cContact = sysSettings.clinic_contact || '+232 77 123 456';
   const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
@@ -864,7 +917,7 @@ window.emailPrescription = async function(consId) {
       const pName = myRx[0].patient_name;
       const dName = myRx[0].doctor_name;
       
-      const cName = sysSettings.clinic_name || 'DCMS Skin Clinic';
+      const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
       const cAdd = sysSettings.clinic_address || '123 Health Ave, Freetown';
       const cContact = sysSettings.clinic_contact || '+232 77 123 456';
       const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
@@ -944,7 +997,7 @@ window.printPrescription = async function(consId) {
     const pName = myRx[0].patient_name;
     const dName = myRx[0].doctor_name;
     
-    const cName = sysSettings.clinic_name || 'DCMS Skin Clinic';
+    const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
     const cAdd = sysSettings.clinic_address || '123 Health Ave, Freetown';
   const cContact = sysSettings.clinic_contact || '+232 77 123 456';
   const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
@@ -1004,7 +1057,7 @@ window.printPrescription = async function(consId) {
 
 window.printBookingReceipt = function(patId, date, fee) {
   const p = allPatients.find(x=>x.id == patId);
-  const cName = sysSettings.clinic_name || 'DCMS Skin Clinic';
+  const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
   const cAdd = sysSettings.clinic_address || '123 Health Ave, Freetown';
   const cContact = sysSettings.clinic_contact || '+232 77 123 456';
   const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
@@ -1766,7 +1819,7 @@ window.buildPharmacyReceiptHTML = function(paidItems) {
   if(!paidItems.length) return '';
   const pName = paidItems[0].patient_name;
   const total = paidItems.reduce((a, b) => a + (b.price||0), 0);
-  const cName = sysSettings.clinic_name || 'DCMS Skin Clinic';
+  const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
   const cAdd = sysSettings.clinic_address || '123 Health Ave, Freetown';
   const cContact = sysSettings.clinic_contact || '+232 77 123 456';
   const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
@@ -1803,7 +1856,7 @@ window.buildFinalReceiptHTML = function(id) {
   if (!b) return '';
   const items = JSON.parse(b.items_json);
   
-  const cName = sysSettings.clinic_name || 'DCMS Skin Clinic';
+  const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
   const cAdd = sysSettings.clinic_address || '123 Health Ave, Freetown';
   const cContact = sysSettings.clinic_contact || '+232 77 123 456';
   const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
@@ -1841,7 +1894,7 @@ window.printPharmacyReceipt = function(paidItems) {
   if(!paidItems.length) return;
   const pName = paidItems[0].patient_name;
   const total = paidItems.reduce((a, b) => a + (b.price||0), 0);
-  const cName = sysSettings.clinic_name || 'DCMS Skin Clinic';
+  const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
   const cAdd = sysSettings.clinic_address || '123 Health Ave, Freetown';
   const cContact = sysSettings.clinic_contact || '+232 77 123 456';
   const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
@@ -1998,7 +2051,7 @@ window.emailFinalReceipt = async function(btn, billId, patId) {
         method: 'POST',
         body: JSON.stringify({
           to: pat.email,
-          subject: 'Your Official Receipt - ' + (window.sysSettings?.clinic_name || 'DCMS'),
+          subject: 'Your Official Receipt - ' + (window.sysSettings?.clinic_name || 'Radiance Derms'),
           htmlBody: '<p>Thank you. Please find your official receipt attached.</p>',
           htmlString: htmlStr,
           filename: `Receipt_${billId}.pdf`
@@ -2026,7 +2079,7 @@ window.printFinalReceipt = function(id) {
   if (!b) return;
   const items = JSON.parse(b.items_json);
   
-  const cName = sysSettings.clinic_name || 'DCMS Skin Clinic';
+  const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
   const cAdd = sysSettings.clinic_address || '123 Health Ave, Freetown';
   const cContact = sysSettings.clinic_contact || '+232 77 123 456';
   const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
@@ -2203,6 +2256,95 @@ window.deleteSysData = async function(table, id) {
     toast('Record deleted!');
     loadAdminDataTable();
   } catch(e) { toast(e.message); }
+}
+
+// --- Software Update Functions ---
+window.checkForAppUpdates = function() {
+  const statusEl = document.getElementById('updateStatusText');
+  const btn = document.getElementById('checkUpdateBtn');
+  if (statusEl) statusEl.textContent = 'Checking for updates...';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:6px;"></i>Checking...'; }
+  
+  if (window.electronAPI && window.electronAPI.checkForUpdates) {
+    window.electronAPI.checkForUpdates();
+  } else {
+    if (statusEl) statusEl.textContent = 'Updates are only available in the desktop app.';
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt" style="margin-right:6px;"></i>Check for Updates'; }
+  }
+};
+
+// Listen for update status from Electron main process
+if (window.electronAPI && window.electronAPI.onUpdateStatus) {
+  window.electronAPI.onUpdateStatus((data) => {
+    const statusEl = document.getElementById('updateStatusText');
+    const btn = document.getElementById('checkUpdateBtn');
+    const progressContainer = document.getElementById('updateProgressContainer');
+    const progressBar = document.getElementById('updateProgressBar');
+
+    if (statusEl) {
+      statusEl.textContent = data.message;
+      if (data.status === 'up-to-date') statusEl.style.color = '#16a34a';
+      else if (data.status === 'available' || data.status === 'downloading') statusEl.style.color = '#2563eb';
+      else if (data.status === 'ready') statusEl.style.color = '#16a34a';
+      else if (data.status === 'error') statusEl.style.color = '#dc2626';
+      else statusEl.style.color = '#64748b';
+    }
+
+    if (data.status === 'checking') {
+      if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+        btn.style.cursor = 'not-allowed';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:6px;"></i>Checking...';
+      }
+    } else if (data.status === 'available' || data.status === 'downloading') {
+      if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+        btn.style.cursor = 'not-allowed';
+        btn.innerHTML = '<i class="fas fa-download fa-pulse" style="margin-right:6px;"></i>Downloading...';
+      }
+      if (progressContainer) progressContainer.style.display = 'block';
+      if (progressBar && typeof data.percent === 'number') {
+        progressBar.style.width = Math.min(100, Math.max(0, data.percent)) + '%';
+      }
+    } else if (data.status === 'ready') {
+      if (progressContainer) progressContainer.style.display = 'block';
+      if (progressBar) progressBar.style.width = '100%';
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        btn.style.background = 'linear-gradient(135deg, #16a34a, #15803d)';
+        btn.innerHTML = '<i class="fas fa-power-off" style="margin-right:6px;"></i>Install & Restart Now';
+        btn.onclick = function() {
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right:6px;"></i>Installing...';
+          if (window.electronAPI && window.electronAPI.quitAndInstall) {
+            window.electronAPI.quitAndInstall();
+          }
+        };
+      }
+    } else if (data.status === 'up-to-date' || data.status === 'error') {
+      if (progressContainer) progressContainer.style.display = 'none';
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        btn.style.background = 'linear-gradient(135deg, #3b82f6, #2563eb)';
+        btn.innerHTML = '<i class="fas fa-sync-alt" style="margin-right:6px;"></i>Check for Updates';
+        btn.onclick = function() { checkForAppUpdates(); };
+      }
+    }
+  });
+}
+
+// Get app version on load
+if (window.electronAPI && window.electronAPI.getAppVersion) {
+  window.electronAPI.getAppVersion().then(v => {
+    const el = document.getElementById('appVersionDisplay');
+    if (el) el.textContent = v;
+  });
 }
 
 window.updateSysSettings = async function(btn) {
@@ -2592,7 +2734,7 @@ window.exportReportsCSV = function() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'DCMS_Analytics_Report.csv';
+  a.download = 'Radiance Derms_Analytics_Report.csv';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

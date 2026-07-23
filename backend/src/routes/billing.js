@@ -4,29 +4,25 @@ const db = require('../firebase');
 
 router.get('/', async (req, res) => {
   try {
-    const snap = await db.collection('billing').orderBy('created_at', 'desc').get();
-    const results = [];
-    const patientCache = {};
+    const [snap, patientsSnap] = await Promise.all([
+      db.collection('billing').orderBy('created_at', 'desc').get(),
+      db.collection('patients').get()
+    ]);
 
-    for (let doc of snap.docs) {
+    const patientMap = {};
+    patientsSnap.docs.forEach(doc => {
+      patientMap[doc.id] = doc.data().name || 'Unknown Patient';
+    });
+
+    const results = snap.docs.map(doc => {
       const b = doc.data();
       const pId = String(b.patient_id);
-
-      let pName = 'Unknown Patient';
-      if (pId && pId !== 'undefined') {
-        if (!patientCache[pId]) {
-          const pat = await db.collection('patients').doc(pId).get();
-          patientCache[pId] = pat.exists ? pat.data().name : 'Unknown Patient';
-        }
-        pName = patientCache[pId];
-      }
-
-      results.push({
+      return {
         id: doc.id,
         ...b,
-        patient_name: pName
-      });
-    }
+        patient_name: patientMap[pId] || 'Unknown Patient'
+      };
+    });
 
     res.json(results);
   } catch (err) {

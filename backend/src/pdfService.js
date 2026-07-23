@@ -18,26 +18,32 @@ async function getBrowser() {
  * @returns {Promise<Buffer>} - The generated PDF buffer
  */
 async function generatePdfBuffer(htmlContent) {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-  
-  // Set the HTML content
-  await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-  
-  // Generate the PDF
-  const pdfBuffer = await page.pdf({
-    format: 'Letter',
-    printBackground: true,
-    margin: {
-      top: '0.5in',
-      bottom: '0.5in',
-      left: '0.5in',
-      right: '0.5in'
-    }
-  });
+  let page = null;
+  try {
+    const browser = await getBrowser();
+    page = await browser.newPage();
+    
+    // Set the HTML content with a 15s timeout and domcontentloaded to prevent network hangs
+    await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    
+    // Generate the PDF
+    const pdfBuffer = await page.pdf({
+      format: 'Letter',
+      printBackground: true,
+      margin: {
+        top: '0.5in',
+        bottom: '0.5in',
+        left: '0.5in',
+        right: '0.5in'
+      }
+    });
 
-  await page.close();
-  return pdfBuffer;
+    return pdfBuffer;
+  } finally {
+    if (page) {
+      try { await page.close(); } catch (e) {}
+    }
+  }
 }
 
 module.exports = {

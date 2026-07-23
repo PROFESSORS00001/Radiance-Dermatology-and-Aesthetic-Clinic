@@ -5,48 +5,40 @@ const { sendEmail } = require('../mailer');
 
 router.get('/', async (req, res) => {
   try {
-    const appsSnap = await db.collection('appointments').orderBy('date', 'asc').get();
-    
-    // Instead of SQL JOINs, we map relationships in memory
-    const results = [];
-    
-    // Quick cache to avoid repeated fetching
-    const patientCache = {};
-    const userCache = {};
+    // Parallelize fetching appointments, patients, and users to eliminate N+1 roundtrips
+    const [appsSnap, patientsSnap, usersSnap] = await Promise.all([
+      db.collection('appointments').orderBy('date', 'asc').get(),
+      db.collection('patients').get(),
+      db.collection('users').get()
+    ]);
 
-    for (let doc of appsSnap.docs) {
+    // Build fast in-memory lookup maps
+    const patientMap = {};
+    patientsSnap.docs.forEach(doc => {
+      patientMap[doc.id] = doc.data().name || 'Unknown Patient';
+    });
+
+    const userMap = {};
+    usersSnap.docs.forEach(doc => {
+      userMap[doc.id] = doc.data().name || 'Unknown Doctor';
+    });
+
+    const results = appsSnap.docs.map(doc => {
       const a = doc.data();
       const pId = String(a.patient_id);
       const dId = String(a.doctor_id);
 
-      let pName = 'Unknown Patient';
-      if (pId && pId !== 'undefined') {
-        if (!patientCache[pId]) {
-          const pat = await db.collection('patients').doc(pId).get();
-          patientCache[pId] = pat.exists ? pat.data().name : 'Unknown Patient';
-        }
-        pName = patientCache[pId];
-      }
-
-      let dName = 'Unknown Doctor';
-      if (dId && dId !== 'undefined') {
-        if (!userCache[dId]) {
-          const docRes = await db.collection('users').doc(dId).get();
-          userCache[dId] = docRes.exists ? docRes.data().name : 'Unknown Doctor';
-        }
-        dName = userCache[dId];
-      }
-
-      results.push({
+      return {
         id: doc.id,
         ...a,
-        patient_name: pName,
-        doctor_name: dName
-      });
-    }
+        patient_name: patientMap[pId] || 'Unknown Patient',
+        doctor_name: userMap[dId] || 'Unknown Doctor'
+      };
+    });
 
     res.json(results);
   } catch (err) {
+    console.error("GET appointments error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -69,38 +61,50 @@ router.post('/', async (req, res) => {
     
     const docRef = await db.collection('appointments').add(newApp);
     
-    if (patient_id) {
-      const pat = await db.collection('patients').doc(String(patient_id)).get();
-      if (pat.exists && pat.data().email) {
-        if (htmlString) {
-          const { generatePdfBuffer } = require('../pdfService');
-          const pdfBuffer = await generatePdfBuffer(htmlString);
-          const nodemailer = require('nodemailer');
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.gmail.com',
-            port: parseInt(process.env.SMTP_PORT) || 465,
-            secure: parseInt(process.env.SMTP_PORT) === 465,
-            auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-          });
-          transporter.sendMail({
-            from: `"${process.env.SMTP_FROM_NAME || 'DCMS'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
-            to: pat.data().email,
-            subject: 'Appointment Booking Confirmation',
-            html: `<h3>Hello ${pat.data().name},</h3><p>Your appointment for <b>${purpose}</b> is scheduled for <b>${date} at ${time}</b>.</p><p>Please find your official booking receipt attached.</p>`,
-            attachments: [{ filename: 'booking_receipt.pdf', content: pdfBuffer, contentType: 'application/pdf' }]
-          }).catch(err => console.error("PDF Email err", err));
-        } else {
-          sendEmail(
-            pat.data().email, 
-            'Appointment Booking Confirmation', 
-            `<h3>Hello ${pat.data().name},</h3><p>Your appointment for <b>${purpose}</b> is scheduled for <b>${date} at ${time}</b>.</p>`
-          );
-        }
-      }
-    }
-    
+    // IMMEDIATELY respond to frontend so the UI doesn't hang!
     res.status(201).json({ id: docRef.id, success: true });
+
+    // Handle PDF generation and email asynchronously in background
+    if (patient_id) {
+      (async () => {
+        try {
+          const pat = await db.collection('patients').doc(String(patient_id)).get();
+          if (pat.exists && pat.data().email) {
+            const recipientEmail = pat.data().email;
+            const recipientName = pat.data().name || 'Patient';
+
+            if (htmlString) {
+              const { generatePdfBuffer } = require('../pdfService');
+              const pdfBuffer = await generatePdfBuffer(htmlString);
+              const nodemailer = require('nodemailer');
+              const transporter = nodemailer.createTransport({
+                host: process.env.SMTP_HOST || 'smtp.gmail.com',
+                port: parseInt(process.env.SMTP_PORT) || 465,
+                secure: parseInt(process.env.SMTP_PORT) === 465,
+                auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+              });
+              await transporter.sendMail({
+                from: `"${process.env.SMTP_FROM_NAME || 'Radiance Derms'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+                to: recipientEmail,
+                subject: 'Appointment Booking Confirmation',
+                html: `<h3>Hello ${recipientName},</h3><p>Your appointment for <b>${purpose}</b> is scheduled for <b>${date} at ${time}</b>.</p><p>Please find your official booking receipt attached.</p>`,
+                attachments: [{ filename: 'booking_receipt.pdf', content: pdfBuffer, contentType: 'application/pdf' }]
+              });
+            } else {
+              sendEmail(
+                recipientEmail, 
+                'Appointment Booking Confirmation', 
+                `<h3>Hello ${recipientName},</h3><p>Your appointment for <b>${purpose}</b> is scheduled for <b>${date} at ${time}</b>.</p>`
+              );
+            }
+          }
+        } catch (bgErr) {
+          console.error("Background appointment email error:", bgErr);
+        }
+      })();
+    }
   } catch (err) {
+    console.error("POST appointments error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -120,48 +124,53 @@ router.patch('/:id/status', async (req, res) => {
     if (new_time) updateData.time = new_time;
     
     await appRef.update(updateData);
+
+    // Respond immediately to UI
+    res.json({ success: true });
     
-    // Auto-fetch patient if patientEmail is not explicitly passed, so we can always send notifications
-    let targetEmail = patientEmail;
-    let patName = 'Patient';
-    if (!targetEmail && appData.patient_id) {
-        const patDoc = await db.collection('patients').doc(String(appData.patient_id)).get();
-        if (patDoc.exists) {
+    // Background email processing
+    (async () => {
+      try {
+        let targetEmail = patientEmail;
+        let patName = 'Patient';
+        if (!targetEmail && appData.patient_id) {
+          const patDoc = await db.collection('patients').doc(String(appData.patient_id)).get();
+          if (patDoc.exists) {
             targetEmail = patDoc.data().email;
             patName = patDoc.data().name || 'Patient';
+          }
         }
-    }
-    
-    if (targetEmail) {
-      if (htmlString) {
-        const nodemailer = require('nodemailer');
-        const { generatePdfBuffer } = require('../pdfService');
-        const pdfBuffer = await generatePdfBuffer(htmlString);
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST || 'smtp.gmail.com',
-          port: parseInt(process.env.SMTP_PORT) || 465,
-          secure: parseInt(process.env.SMTP_PORT) === 465,
-          auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-        });
-        await transporter.sendMail({
-          from: `"${process.env.SMTP_FROM_NAME || 'DCMS'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
-          to: targetEmail,
-          subject: `Appointment ${status} Receipt`,
-          html: `<p>Your appointment has been ${status}. Please find your receipt attached.</p>`,
-          attachments: [{ filename: 'booking_receipt.pdf', content: pdfBuffer, contentType: 'application/pdf' }]
-        }).catch(err => console.error("PDF Email err", err));
-      } else {
-        // Fallback plain email for Rescheduling or approvals
-        const { sendEmail } = require('../mailer');
-        let subj = `Appointment ${status} Notification`;
-        let actualDate = new_date || appData.date;
-        let actualTime = new_time || appData.time;
-        let msg = `<h3>Hello ${patName},</h3><p>Your appointment has been officially <b>${status}</b>.</p><p>It is currently set for <b>${actualDate}</b> at <b>${actualTime}</b>.</p><p>Thank you!</p>`;
-        sendEmail(targetEmail, subj, msg).catch(err => console.error("Plain Email err", err));
+        
+        if (targetEmail) {
+          if (htmlString) {
+            const nodemailer = require('nodemailer');
+            const { generatePdfBuffer } = require('../pdfService');
+            const pdfBuffer = await generatePdfBuffer(htmlString);
+            const transporter = nodemailer.createTransport({
+              host: process.env.SMTP_HOST || 'smtp.gmail.com',
+              port: parseInt(process.env.SMTP_PORT) || 465,
+              secure: parseInt(process.env.SMTP_PORT) === 465,
+              auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+            });
+            await transporter.sendMail({
+              from: `"${process.env.SMTP_FROM_NAME || 'Radiance Derms'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+              to: targetEmail,
+              subject: `Appointment ${status} Receipt`,
+              html: `<p>Your appointment has been ${status}. Please find your receipt attached.</p>`,
+              attachments: [{ filename: 'booking_receipt.pdf', content: pdfBuffer, contentType: 'application/pdf' }]
+            });
+          } else {
+            let subj = `Appointment ${status} Notification`;
+            let actualDate = new_date || appData.date;
+            let actualTime = new_time || appData.time;
+            let msg = `<h3>Hello ${patName},</h3><p>Your appointment has been officially <b>${status}</b>.</p><p>It is currently set for <b>${actualDate}</b> at <b>${actualTime}</b>.</p><p>Thank you!</p>`;
+            sendEmail(targetEmail, subj, msg).catch(err => console.error("Plain Email err", err));
+          }
+        }
+      } catch (bgErr) {
+        console.error("Background status update email error:", bgErr);
       }
-    }
-
-    res.json({ success: true });
+    })();
   } catch (err) {
     console.error("Status update error", err);
     res.status(500).json({ error: err.message });
