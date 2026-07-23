@@ -55,22 +55,16 @@ const appRoot = document.getElementById('app');
 
 function renderLogin() {
   const brandName = window.publicBrand.clinic_name || 'Radiance Derms';
+  const logoSrc = window.publicBrand.clinic_logo || '/logo.png';
   
-  let brandLockup = '';
-  if (window.publicBrand.clinic_logo) {
-    brandLockup = `
-      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; margin-bottom:1.2rem; gap:12px;">
-        <div class="logo-wrapper-pro" style="margin:0; max-width:150px; max-height:50px; display:flex; align-items:center; justify-content:center;"><img src="${window.publicBrand.clinic_logo}" style="max-width:100%; max-height:50px; object-fit:contain; border-radius:4px;"></div>
-        <h1 style="margin:0; font-size:1.4rem; font-weight:800; letter-spacing:1px; background: linear-gradient(135deg, #2563eb 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0px 2px 4px rgba(37, 99, 235, 0.15));">${brandName}</h1>
+  const brandLockup = `
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; margin-bottom:1.5rem; gap:12px;">
+      <div class="logo-wrapper-pro" style="margin:0; max-width:160px; max-height:80px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+        <img src="${logoSrc}" style="width:100%; height:100%; object-fit:contain; border-radius:8px;" onerror="this.style.display='none'">
       </div>
-    `;
-  } else {
-    brandLockup = `
-      <div style="margin-bottom:1.2rem;">
-        <h1 style="margin:0; font-size:2rem; font-weight:800; letter-spacing:1.5px; background: linear-gradient(135deg, #2563eb 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0px 8px 16px rgba(37, 99, 235, 0.15); filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.1));">${brandName}</h1>
-      </div>
-    `;
-  }
+      <h1 style="margin:0; font-size:1.6rem; font-weight:800; letter-spacing:1px; background: linear-gradient(135deg, #2563eb 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0px 2px 4px rgba(37, 99, 235, 0.15));">${brandName}</h1>
+    </div>
+  `;
 
   appRoot.innerHTML = `
     <div class="auth-wrapper">
