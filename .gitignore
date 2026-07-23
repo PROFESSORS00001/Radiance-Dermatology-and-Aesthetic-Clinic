@@ -7,4 +7,5 @@ clinic.db
 logs/
 .DS_Store
 *.exe
+backend/firebase-service-account.json
 
