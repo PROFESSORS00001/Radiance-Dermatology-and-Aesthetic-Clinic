@@ -18,6 +18,19 @@ router.post('/', async (req, res) => {
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
   try {
+    const patientsRef = db.collection('patients');
+    
+    // Check duplication by phone or email
+    if (phone) {
+      const phoneCheck = await patientsRef.where('phone', '==', phone).get();
+      if (!phoneCheck.empty) return res.status(400).json({ error: 'A patient with this phone number already exists.' });
+    }
+    
+    if (email) {
+      const emailCheck = await patientsRef.where('email', '==', email).get();
+      if (!emailCheck.empty) return res.status(400).json({ error: 'A patient with this email already exists.' });
+    }
+
     const counterRef = db.collection('counters').doc('patients');
     
     const newId = await db.runTransaction(async (t) => {

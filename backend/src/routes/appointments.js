@@ -2,40 +2,13 @@ const express = require('express');
 const router = express.Router();
 const db = require('../firebase');
 const { sendEmail } = require('../mailer');
+const { resolvePatientAndDoctorNames } = require('../resolver');
 
 router.get('/', async (req, res) => {
   try {
-    // Parallelize fetching appointments, patients, and users to eliminate N+1 roundtrips
-    const [appsSnap, patientsSnap, usersSnap] = await Promise.all([
-      db.collection('appointments').orderBy('date', 'asc').get(),
-      db.collection('patients').get(),
-      db.collection('users').get()
-    ]);
-
-    // Build fast in-memory lookup maps
-    const patientMap = {};
-    patientsSnap.docs.forEach(doc => {
-      patientMap[doc.id] = doc.data().name || 'Unknown Patient';
-    });
-
-    const userMap = {};
-    usersSnap.docs.forEach(doc => {
-      userMap[doc.id] = doc.data().name || 'Unknown Doctor';
-    });
-
-    const results = appsSnap.docs.map(doc => {
-      const a = doc.data();
-      const pId = String(a.patient_id);
-      const dId = String(a.doctor_id);
-
-      return {
-        id: doc.id,
-        ...a,
-        patient_name: patientMap[pId] || 'Unknown Patient',
-        doctor_name: userMap[dId] || 'Unknown Doctor'
-      };
-    });
-
+    const appsSnap = await db.collection('appointments').orderBy('date', 'asc').get();
+    const apps = appsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const results = await resolvePatientAndDoctorNames(apps, 'patient_id', 'doctor_id');
     res.json(results);
   } catch (err) {
     console.error("GET appointments error:", err);
@@ -74,8 +47,14 @@ router.post('/', async (req, res) => {
             const recipientName = pat.data().name || 'Patient';
 
             if (htmlString) {
-              const { generatePdfBuffer } = require('../pdfService');
-              const pdfBuffer = await generatePdfBuffer(htmlString);
+              let pdfBuffer = null;
+              try {
+                const { generatePdfBuffer } = require('../pdfService');
+                pdfBuffer = await generatePdfBuffer(htmlString);
+              } catch (pdfErr) {
+                console.error("PDF generation failed, falling back to plain email confirmation:", pdfErr);
+              }
+
               const nodemailer = require('nodemailer');
               const transporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -83,13 +62,22 @@ router.post('/', async (req, res) => {
                 secure: parseInt(process.env.SMTP_PORT) === 465,
                 auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
               });
-              await transporter.sendMail({
+
+              const mailOptions = {
                 from: `"${process.env.SMTP_FROM_NAME || 'Radiance Derms'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
                 to: recipientEmail,
                 subject: 'Appointment Booking Confirmation',
-                html: `<h3>Hello ${recipientName},</h3><p>Your appointment for <b>${purpose}</b> is scheduled for <b>${date} at ${time}</b>.</p><p>Please find your official booking receipt attached.</p>`,
-                attachments: [{ filename: 'booking_receipt.pdf', content: pdfBuffer, contentType: 'application/pdf' }]
-              });
+                html: `<h3>Hello ${recipientName},</h3><p>Your appointment for <b>${purpose}</b> is scheduled for <b>${date} at ${time}</b>.</p>${pdfBuffer ? '<p>Please find your official booking receipt attached.</p>' : '<p>Your payment has been successfully recorded. Thank you for choosing Radiance Derms.</p>'}`
+              };
+
+              if (pdfBuffer) {
+                mailOptions.attachments = [{ filename: 'booking_receipt.pdf', content: pdfBuffer, contentType: 'application/pdf' }];
+              } else if (htmlString) {
+                mailOptions.html += `<div style="margin-top:2rem; padding:1.5rem; border:1px solid #cbd5e1; border-radius:8px; background:#fafafa;">${htmlString}</div>`;
+                mailOptions.html += `<p style="color:#64748b; font-size:12px; margin-top:2rem; border-top:1px dashed #cbd5e1; padding-top:1rem;">Note: This receipt could not be rendered as a PDF attachment on your system, so the details have been displayed directly in the email body above.</p>`;
+              }
+
+              await transporter.sendMail(mailOptions);
             } else {
               sendEmail(
                 recipientEmail, 
@@ -109,17 +97,54 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/verify_payment', async (req, res) => {
   try {
-    const { status, htmlString, patientEmail, new_date, new_time } = req.body;
-    
     const appRef = db.collection('appointments').doc(req.params.id);
     const appDoc = await appRef.get();
-    
-    if (!appDoc.exists) return res.status(404).json({error: 'Appointment not found'});
+    if (!appDoc.exists) return res.status(404).json({ error: 'Appointment not found' });
+
     const appData = appDoc.data();
-    
+    await appRef.update({ payment_status: 'Verified', status: 'Approved' });
+    res.json({ success: true });
+
+    (async () => {
+       const patDoc = await db.collection('patients').doc(appData.patient_id).get();
+       const patEmail = patDoc.exists ? patDoc.data().email : null;
+       
+       if (patEmail) {
+         const { sendEmail } = require('../mailer');
+         const snap = await db.collection('settings').get();
+         let clinicName = 'Radiance Dermatology Clinic';
+         snap.docs.forEach(d => {
+           if (d.id === 'clinic_name') clinicName = d.data().value;
+         });
+         
+         const html = `
+           <h3>Hello ${appData.patient_name},</h3>
+           <p>Your Orange Money payment (Transaction ID: ${appData.orange_money_transaction_id}) has been successfully <b>Verified</b>.</p>
+           <p>Your appointment for <b>${appData.purpose}</b> is now confirmed for <b>${appData.date} at ${appData.time}</b> at ${clinicName}.</p>
+           <p>We look forward to seeing you!</p>
+           <br><p>The Clinic Team</p>
+         `;
+         await sendEmail(patEmail, `Payment Verified & Appointment Confirmed`, html);
+       }
+    })().catch(err => console.error('Email error in verify payment:', err));
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/:id/status', async (req, res) => {
+  const { status, patientEmail, htmlString, new_date, new_time } = req.body;
+  
+  try {
+    const appRef = db.collection('appointments').doc(req.params.id);
+    const appDoc = await appRef.get();
+    if (!appDoc.exists) return res.status(404).json({ error: 'Appointment not found' });
+
+    const appData = appDoc.data();
     const updateData = { status };
+
     if (new_date) updateData.date = new_date;
     if (new_time) updateData.time = new_time;
     
@@ -143,22 +168,37 @@ router.patch('/:id/status', async (req, res) => {
         
         if (targetEmail) {
           if (htmlString) {
+            let pdfBuffer = null;
+            try {
+              const { generatePdfBuffer } = require('../pdfService');
+              pdfBuffer = await generatePdfBuffer(htmlString);
+            } catch (pdfErr) {
+              console.error("PDF status email generation failed, falling back to plain email:", pdfErr);
+            }
+
             const nodemailer = require('nodemailer');
-            const { generatePdfBuffer } = require('../pdfService');
-            const pdfBuffer = await generatePdfBuffer(htmlString);
             const transporter = nodemailer.createTransport({
               host: process.env.SMTP_HOST || 'smtp.gmail.com',
               port: parseInt(process.env.SMTP_PORT) || 465,
               secure: parseInt(process.env.SMTP_PORT) === 465,
               auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
             });
-            await transporter.sendMail({
+
+            const mailOptions = {
               from: `"${process.env.SMTP_FROM_NAME || 'Radiance Derms'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
               to: targetEmail,
               subject: `Appointment ${status} Receipt`,
-              html: `<p>Your appointment has been ${status}. Please find your receipt attached.</p>`,
-              attachments: [{ filename: 'booking_receipt.pdf', content: pdfBuffer, contentType: 'application/pdf' }]
-            });
+              html: `<p>Your appointment has been ${status}. ${pdfBuffer ? 'Please find your receipt attached.' : 'Thank you for choosing Radiance Derms.'}</p>`
+            };
+
+            if (pdfBuffer) {
+              mailOptions.attachments = [{ filename: 'booking_receipt.pdf', content: pdfBuffer, contentType: 'application/pdf' }];
+            } else if (htmlString) {
+              mailOptions.html += `<div style="margin-top:2rem; padding:1.5rem; border:1px solid #cbd5e1; border-radius:8px; background:#fafafa;">${htmlString}</div>`;
+              mailOptions.html += `<p style="color:#64748b; font-size:12px; margin-top:2rem; border-top:1px dashed #cbd5e1; padding-top:1rem;">Note: This receipt could not be rendered as a PDF attachment on your system, so the details have been displayed directly in the email body above.</p>`;
+            }
+
+            await transporter.sendMail(mailOptions);
           } else {
             let subj = `Appointment ${status} Notification`;
             let actualDate = new_date || appData.date;

@@ -1,11 +1,34 @@
 const puppeteer = require('puppeteer');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 let browserPromise = null;
 
 async function getBrowser() {
   if (!browserPromise) {
+    let executablePath = undefined;
+    
+    // Check common paths for Chrome on Windows
+    if (process.platform === 'win32') {
+      const possiblePaths = [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        path.join(os.homedir(), 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'),
+        path.join(os.homedir(), 'Local Settings\\Application Data\\Google\\Chrome\\Application\\chrome.exe')
+      ];
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          executablePath = p;
+          console.log("Found local Chrome executable for PDF generation:", executablePath);
+          break;
+        }
+      }
+    }
+
     browserPromise = puppeteer.launch({
       headless: 'new',
+      executablePath: executablePath,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     });
   }

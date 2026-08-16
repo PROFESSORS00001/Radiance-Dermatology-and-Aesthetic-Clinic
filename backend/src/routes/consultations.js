@@ -1,38 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../firebase');
+const { resolvePatientAndDoctorNames } = require('../resolver');
 
 router.get('/', async (req, res) => {
   try {
-    const [snap, patientsSnap, usersSnap] = await Promise.all([
-      db.collection('consultations').orderBy('created_at', 'desc').get(),
-      db.collection('patients').get(),
-      db.collection('users').get()
-    ]);
-
-    const patientMap = {};
-    patientsSnap.docs.forEach(doc => {
-      patientMap[doc.id] = doc.data().name || 'Unknown Patient';
-    });
-
-    const userMap = {};
-    usersSnap.docs.forEach(doc => {
-      userMap[doc.id] = doc.data().name || 'Unknown Doctor';
-    });
-
-    const results = snap.docs.map(doc => {
-      const c = doc.data();
-      const pId = String(c.patient_id);
-      const dId = String(c.doctor_id);
-
-      return {
-        id: doc.id,
-        ...c,
-        patient_name: patientMap[pId] || 'Unknown Patient',
-        doctor_name: userMap[dId] || 'Unknown Doctor'
-      };
-    });
-
+    const snap = await db.collection('consultations').orderBy('created_at', 'desc').get();
+    const consultations = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const results = await resolvePatientAndDoctorNames(consultations, 'patient_id', 'doctor_id');
     res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -65,7 +40,22 @@ router.post('/', async (req, res) => {
       treatment_given_json: JSON.stringify(payload.treatment_given || []),
       follow_up_needed: payload.follow_up_needed || null,
       follow_up_interval: payload.follow_up_interval || null,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      visit_type: payload.visit_type || null,
+      referred_by: payload.referred_by || null,
+      history_of_presenting_complaint: payload.history_of_presenting_complaint || null,
+      past_history_json: payload.past_history_json || null,
+      drug_history_json: payload.drug_history_json || null,
+      morphology_json: payload.morphology_json || null,
+      distribution_json: payload.distribution_json || null,
+      site_affected: payload.site_affected || null,
+      additional_findings: payload.additional_findings || null,
+      body_map_data_json: payload.body_map_data_json || null,
+      differential_diagnosis: payload.differential_diagnosis || null,
+      investigations_ordered_json: payload.investigations_ordered_json || null,
+      patient_education: payload.patient_education || null,
+      next_appointment_type: payload.next_appointment_type || null,
+      next_appointment_date: payload.next_appointment_date || null
     };
     
     const consRef = await db.collection('consultations').add(consultationData);
@@ -85,6 +75,7 @@ router.post('/', async (req, res) => {
       for (let lab of payload.lab_orders) {
         await db.collection('lab_orders').add({
           consultation_id,
+          appointment_id: String(payload.appointment_id || ''),
           patient_id: String(payload.patient_id),
           doctor_id: String(payload.doctor_id),
           test_name: lab.test_name,
@@ -150,12 +141,115 @@ router.post('/', async (req, res) => {
     
     if (payload.appointment_id) {
       await db.collection('appointments').doc(String(payload.appointment_id)).update({ status: 'Completed' });
+      try {
+        await db.collection('draft_consultations').doc(String(payload.appointment_id)).delete();
+      } catch (err) {}
     }
 
     res.status(201).json({ id: consultation_id, success: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to process consultation workflow' });
+  }
+});
+
+router.post('/lab_orders_draft', async (req, res) => {
+  const payload = req.body;
+  if (!payload.appointment_id || !payload.patient_id) {
+    return res.status(400).json({ error: 'appointment_id and patient_id required' });
+  }
+
+  try {
+    await db.collection('draft_consultations').doc(String(payload.appointment_id)).set({
+      appointment_id: String(payload.appointment_id),
+      patient_id: String(payload.patient_id),
+      doctor_id: String(payload.doctor_id || ''),
+      age_group: payload.age_group || null,
+      gender: payload.gender || null,
+      residence_type: payload.residence_type || null,
+      primary_complaint: payload.primary_complaint || null,
+      working_diagnosis: payload.working_diagnosis || null,
+      doctor_notes: payload.doctor_notes || null,
+      visit_type: payload.visit_type || null,
+      referred_by: payload.referred_by || null,
+      history_of_presenting_complaint: payload.history_of_presenting_complaint || null,
+      past_history_json: payload.past_history_json || null,
+      drug_history_json: payload.drug_history_json || null,
+      morphology_json: payload.morphology_json || null,
+      distribution_json: payload.distribution_json || null,
+      site_affected: payload.site_affected || null,
+      additional_findings: payload.additional_findings || null,
+      body_map_data_json: payload.body_map_data_json || null,
+      differential_diagnosis: payload.differential_diagnosis || null,
+      investigations_ordered_json: payload.investigations_ordered_json || null,
+      patient_education: payload.patient_education || null,
+      next_appointment_type: payload.next_appointment_type || null,
+      next_appointment_date: payload.next_appointment_date || null,
+      updated_at: new Date().toISOString()
+    });
+
+    let totalAmount = 0;
+    const billItems = [];
+    if (Array.isArray(payload.lab_orders)) {
+      for (let lab of payload.lab_orders) {
+        await db.collection('lab_orders').add({
+          appointment_id: String(payload.appointment_id),
+          patient_id: String(payload.patient_id),
+          doctor_id: String(payload.doctor_id || ''),
+          test_name: lab.test_name,
+          price: parseFloat(lab.price) || 0,
+          status: 'Pending',
+          result: '',
+          created_at: new Date().toISOString()
+        });
+        totalAmount += parseFloat(lab.price) || 0;
+        billItems.push({ name: lab.test_name, type: 'Lab Test', cost: parseFloat(lab.price) || 0 });
+      }
+    }
+
+    if (totalAmount > 0) {
+      await db.collection('billing').add({
+        appointment_id: String(payload.appointment_id),
+        patient_id: String(payload.patient_id),
+        items_json: JSON.stringify(billItems),
+        total_amount: totalAmount,
+        status: 'Unpaid',
+        created_at: new Date().toISOString()
+      });
+    }
+
+    await db.collection('appointments').doc(String(payload.appointment_id)).update({
+      status: 'Awaiting Lab Results'
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/draft/:appId', async (req, res) => {
+  try {
+    const doc = await db.collection('draft_consultations').doc(String(req.params.appId)).get();
+    if (doc.exists) {
+      res.json(doc.data());
+    } else {
+      res.json(null);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/results/:appId', async (req, res) => {
+  try {
+    const snap = await db.collection('lab_orders')
+      .where('appointment_id', '==', String(req.params.appId))
+      .get();
+    res.json(snap.docs.map(d => d.data()));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

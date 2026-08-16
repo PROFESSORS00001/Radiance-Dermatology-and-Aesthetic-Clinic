@@ -1,29 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../firebase');
+const { resolvePatientAndDoctorNames } = require('../resolver');
 
 router.get('/', async (req, res) => {
   try {
-    const [snap, patientsSnap] = await Promise.all([
-      db.collection('billing').orderBy('created_at', 'desc').get(),
-      db.collection('patients').get()
-    ]);
-
-    const patientMap = {};
-    patientsSnap.docs.forEach(doc => {
-      patientMap[doc.id] = doc.data().name || 'Unknown Patient';
-    });
-
-    const results = snap.docs.map(doc => {
-      const b = doc.data();
-      const pId = String(b.patient_id);
-      return {
-        id: doc.id,
-        ...b,
-        patient_name: patientMap[pId] || 'Unknown Patient'
-      };
-    });
-
+    const snap = await db.collection('billing').orderBy('created_at', 'desc').get();
+    const bills = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const results = await resolvePatientAndDoctorNames(bills, 'patient_id', null);
     res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });

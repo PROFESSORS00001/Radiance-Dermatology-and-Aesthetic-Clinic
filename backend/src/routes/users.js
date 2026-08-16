@@ -11,7 +11,8 @@ router.get('/', async (req, res) => {
       return {
         id: doc.id,
         name: data.name,
-        email: data.email,
+        username: data.username,
+        email: data.email || '',
         role: data.role,
         status: data.status,
         last_login: data.last_login,
@@ -25,22 +26,23 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, email, password, role } = req.body;
-  if (!name || !email || !password || !role) {
-    return res.status(400).json({ error: 'All fields required' });
+  const { name, username, email, password, role } = req.body;
+  if (!name || !username || !password || !role) {
+    return res.status(400).json({ error: 'Name, username, password and role are required' });
   }
 
   try {
     const usersRef = db.collection('users');
-    const existing = await usersRef.where('email', '==', email).get();
+    const existing = await usersRef.where('username', '==', username).get();
     if (!existing.empty) {
-      return res.status(400).json({ error: 'Email already exists' });
+      return res.status(400).json({ error: 'Username already exists' });
     }
 
     const hash = await bcrypt.hash(password, 10);
     const newUser = {
       name,
-      email,
+      username,
+      email: email || '',
       password_hash: hash,
       role,
       status: 'active',
@@ -48,7 +50,7 @@ router.post('/', async (req, res) => {
     };
     
     const docRef = await usersRef.add(newUser);
-    res.status(201).json({ id: docRef.id, name, email, role, status: 'active' });
+    res.status(201).json({ id: docRef.id, name, username, email, role, status: 'active' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -9,3 +9,4 @@ logs/
 *.exe
 backend/firebase-service-account.json
 
+.vercel

@@ -2,37 +2,13 @@ const express = require('express');
 const router = express.Router();
 const db = require('../firebase');
 const { sendEmail } = require('../mailer');
+const { resolvePatientAndDoctorNames } = require('../resolver');
 
 router.get('/prescriptions', async (req, res) => {
   try {
-    const [snap, patientsSnap, usersSnap] = await Promise.all([
-      db.collection('prescriptions').orderBy('created_at', 'desc').get(),
-      db.collection('patients').get(),
-      db.collection('users').get()
-    ]);
-
-    const patientMap = {};
-    patientsSnap.docs.forEach(doc => {
-      patientMap[doc.id] = doc.data().name || 'Unknown Patient';
-    });
-
-    const userMap = {};
-    usersSnap.docs.forEach(doc => {
-      userMap[doc.id] = doc.data().name || 'Unknown Doctor';
-    });
-
-    const results = snap.docs.map(doc => {
-      const rx = doc.data();
-      const pId = String(rx.patient_id);
-      const dId = String(rx.doctor_id);
-
-      return {
-        id: doc.id,
-        ...rx,
-        patient_name: patientMap[pId] || 'Unknown Patient',
-        doctor_name: userMap[dId] || 'Unknown Doctor'
-      };
-    });
+    const snap = await db.collection('prescriptions').orderBy('created_at', 'desc').get();
+    const prescriptions = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const results = await resolvePatientAndDoctorNames(prescriptions, 'patient_id', 'doctor_id');
 
     // Sort by status descending in memory (so 'Pending' is often above 'Completed')
     results.sort((a, b) => (b.status || '').localeCompare(a.status || ''));

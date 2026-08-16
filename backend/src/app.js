@@ -26,6 +26,7 @@ app.use('/api/billing', requireAuth, require('./routes/billing'));
 app.use('/api/settings', requireAuth, require('./routes/settings'));
 app.use('/api/admin', requireAuth, require('./routes/admin'));
 app.use('/api/email', require('./routes/email'));
+app.use('/api/public/booking', require('./routes/public_booking'));
 
 // Ping Route for Latency Tracker
 app.get('/api/ping', (req, res) => {
@@ -38,7 +39,7 @@ app.get('/api/public/branding', async (req, res) => {
     const snap = await db.collection('settings').get();
     const data = {};
     snap.docs.forEach(d => {
-      if (['clinic_name', 'clinic_logo'].includes(d.id)) {
+      if (['clinic_name', 'clinic_logo', 'om_agent_code', 'consultation_fee'].includes(d.id)) {
         data[d.id] = d.data().value;
       }
     });
@@ -46,6 +47,12 @@ app.get('/api/public/branding', async (req, res) => {
   } catch (err) {
     res.json({}); // Silently return empty if error
   }
+});
+
+// Serve patient app
+app.use('/patient', express.static(path.join(__dirname, '../../patient-app')));
+app.get('/patient', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../patient-app/index.html'));
 });
 
 // Serve frontend static files
@@ -56,10 +63,14 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`DCMS backend listening on port ${PORT}`);
-  
-  // Start Cron Jobs
-  const { startCronJobs } = require('./cron');
-  startCronJobs();
-});
+if (process.env.NODE_ENV !== 'production' || require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`DCMS backend listening on port ${PORT}`);
+    
+    // Start Cron Jobs
+    const { startCronJobs } = require('./cron');
+    startCronJobs();
+  });
+}
+
+module.exports = app;

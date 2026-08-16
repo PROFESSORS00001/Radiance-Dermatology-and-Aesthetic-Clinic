@@ -6,12 +6,21 @@ const db = require('../firebase');
 const { JWT_SECRET } = require('../middleware/auth');
 
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  const { username, email, password } = req.body;
+  const loginIdentifier = username || email;
+  
+  if (!loginIdentifier || !password) return res.status(400).json({ error: 'Username/Email and password required' });
 
   try {
     const usersRef = db.collection('users');
-    const snapshot = await usersRef.where('email', '==', email).limit(1).get();
+    
+    // Check username first
+    let snapshot = await usersRef.where('username', '==', loginIdentifier).limit(1).get();
+    
+    // Fallback to email if not found by username
+    if (snapshot.empty) {
+      snapshot = await usersRef.where('email', '==', loginIdentifier).limit(1).get();
+    }
 
     if (snapshot.empty) return res.status(401).json({ error: 'Invalid credentials' });
 

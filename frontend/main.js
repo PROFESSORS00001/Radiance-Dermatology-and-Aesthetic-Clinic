@@ -73,8 +73,8 @@ function renderLogin() {
           <p style="margin-bottom:1.2rem; color:#64748b; font-size:0.9rem;">Login to your account</p>
         <form id="loginForm" autocomplete="off" style="text-align:left;">
           <div class="form-group" style="margin-bottom:1.2rem;">
-            <label>Email</label>
-            <input type="email" id="email" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');" required />
+            <label>Username</label>
+            <input type="text" id="username" autocomplete="off" readonly onfocus="this.removeAttribute('readonly');" required />
           </div>
           <div class="form-group" style="position:relative;">
             <label>Password</label>
@@ -108,7 +108,7 @@ function renderLogin() {
       const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ email: e.target.email.value, password: e.target.password.value })
+        body: JSON.stringify({ username: e.target.username.value, password: e.target.password.value })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -480,8 +480,12 @@ function renderAdminSettings(container) {
             <input type="email" id="admClinicEmail" value="${sysSettings.clinic_email || 'contact@dcmsclinic.com'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
           </div>
           <div class="form-group">
-            <label style="color:#475569; font-weight:500;">Default Consultation Fee (Le)</label>
-            <input type="number" id="admConsFee" value="${sysSettings.consultation_fee || 150000}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
+            <label style="color:#475569; font-weight:500;">Default Booking Fee (Le)</label>
+            <input type="number" id="admConsFee" value="${sysSettings.consultation_fee || 300}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
+          </div>
+          <div class="form-group">
+            <label style="color:#475569; font-weight:500;">Orange Money Agent Code</label>
+            <input type="text" id="admOmAgent" value="${sysSettings.om_agent_code || '123456'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
           </div>
           <div class="form-group span2" style="grid-column: span 2;">
             <label style="color:#475569; font-weight:500;">Clinic Address</label>
@@ -678,10 +682,20 @@ function renderReception(page) {
                 <td><strong>${a.patient_name}</strong></td>
                 <td>${a.doctor_name || 'Any'}</td>
                 <td>${a.purpose}</td>
-                <td><span class="status-badge" style="background:${a.status==='Approved'?'#d1fae5':a.status==='Rescheduled'?'#e0e7ff':'#fef3c7'}; color:${a.status==='Approved'?'#065f46':a.status==='Rescheduled'?'#3730a3':'#92400e'};">${a.status}</span></td>
                 <td>
-                  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                    <button class="btn btn-sm btn-secondary" onclick="printBookingReceipt('${a.patient_id}', '${a.date}', ${fee})">Print Receipt</button>
+                  <span class="status-badge" style="background:${a.status==='Approved'?'#d1fae5':a.status==='Rescheduled'?'#e0e7ff':'#fef3c7'}; color:${a.status==='Approved'?'#065f46':a.status==='Rescheduled'?'#3730a3':'#92400e'};">${a.status}</span>
+                  ${a.payment_status === 'Pending Verification' ? `<br><span style="display:inline-block; margin-top:4px; padding:2px 6px; background:#ffedd5; color:#ea580c; border-radius:4px; font-size:0.75rem; font-weight:bold;">OM Verification Needed</span>` : ''}
+                </td>
+                <td>
+                  <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                    ${a.payment_status === 'Pending Verification' 
+                      ? `<div style="background:#f8fafc; border:1px dashed #cbd5e1; padding:6px; border-radius:6px; font-size:0.8rem;">
+                           <strong style="color:var(--primary);">OM ID: ${a.orange_money_transaction_id}</strong><br>
+                           <small>Fee: Le 300</small>
+                         </div>
+                         <button class="btn btn-sm" style="background:#10b981; width:100%;" onclick="verifyPayment('${a.id}')">Verify OM Payment</button>`
+                      : `<button class="btn btn-sm btn-secondary" onclick="printBookingReceipt('${a.patient_id}', '${a.date}', ${fee})">Print Receipt</button>`
+                    }
                   </div>
                 </td>
               </tr>`).join('')}
@@ -691,8 +705,35 @@ function renderReception(page) {
         </div>
       </div>
     `;
+
+    // Add auto-refresh to check for new bookings every 10 seconds
+    if (!window.receptionAutoRefresh) {
+      window.receptionAutoRefresh = setInterval(async () => {
+        if (window.receptionTab === 'appointments') {
+          const oldLen = allAppointments.length;
+          allAppointments = await apiFetch('/appointments');
+          if (allAppointments.length !== oldLen) {
+            renderReception(document.getElementById('mainContent'));
+            toast("New booking arrived!");
+          }
+        }
+      }, 10000);
+    }
   }
 }
+
+window.verifyPayment = async function(appId) {
+  if(!confirm('Has the Orange Money payment been verified for this booking?')) return;
+  try {
+    toast("Verifying payment and generating receipt email...");
+    await apiFetch(`/appointments/${appId}/verify_payment`, { method: 'PATCH' });
+    toast("Payment verified and email sent!");
+    allAppointments = await apiFetch('/appointments');
+    renderReception(document.getElementById('mainContent'));
+  } catch(err) {
+    toast(err.message);
+  }
+};
 
 window.setReceptionTab = function(tab) {
   window.receptionTab = tab;
@@ -772,11 +813,15 @@ window.openBookAppointmentModal = function() {
         toast("Appointment booked! Receipt emailed securely to patient.");
         allAppointments = await apiFetch('/appointments');
         closeModal();
-      renderReception(document.getElementById('mainContent'));
-      
-      // Auto-print receipt simulation
-      printBookingReceipt(document.getElementById('baPat').value, document.getElementById('baDate').value, fee);
-    } catch(err) { toast(err.message); }
+        renderReception(document.getElementById('mainContent'));
+        
+        // Auto-print receipt simulation
+        printBookingReceipt(document.getElementById('baPat').value, document.getElementById('baDate').value, fee);
+      } catch(err) { 
+        toast(err.message); 
+        btn.disabled = false;
+        btn.innerText = 'Confirm Payment & Book';
+      }
   });
 }
 
@@ -881,7 +926,7 @@ window.buildBookingReceiptHTML = function(patId, date, fee) {
           <hr style="border:none; border-top:1px dashed #cbd5e1; margin:1.5rem 0;">
           <div style="display:flex; justify-content:space-between; font-size:1.2rem; font-weight:bold;">
             <span>Total Consultation Fee:</span>
-            <span>$${fee.toFixed(2)}</span>
+            <span>Le ${Number(fee).toLocaleString()}</span>
           </div>
           <hr style="border:none; border-top:1px dashed #cbd5e1; margin:1.5rem 0;">
           <p style="text-align:center; color:#64748b; font-size:12px; margin-top:3rem;">Thank you for choosing ${cName}.</p>
@@ -1079,6 +1124,316 @@ window.printBookingReceipt = function(patId, date, fee) {
   setTimeout(()=>win.print(), 500);
 }
 
+window.printClinicalRecordCard = async function(consId) {
+  try {
+    toast("Generating Patient Record Card...");
+    const [consList, allRx, allPatientsList] = await Promise.all([
+      apiFetch('/consultations'),
+      apiFetch('/pharmacy/prescriptions'),
+      apiFetch('/patients')
+    ]);
+    
+    const c = consList.find(x => x.id == consId);
+    if (!c) {
+      toast("Clinical record not found.");
+      return;
+    }
+    
+    const p = allPatientsList.find(x => x.id == c.patient_id);
+    const myRx = allRx.filter(rx => rx.consultation_id == consId);
+    
+    const cName = sysSettings.clinic_name || 'Radiance Dermatology & Aesthetic Clinic';
+    const cAdd = sysSettings.clinic_address || '59 Big Waterloo Street, Freetown, Sierra Leone';
+    const cContact = sysSettings.clinic_contact || '+232 77 123 456';
+    const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
+    const logo = sysSettings.clinic_logo ? `<img src="${sysSettings.clinic_logo}" style="max-height:50px; object-fit:contain;">` : '';
+
+    // Checkboxes parsing
+    const parseChecked = (jsonStr, key) => {
+      try {
+        const obj = JSON.parse(jsonStr);
+        return obj && obj[key] ? '☒' : '☐';
+      } catch(e) { return '☐'; }
+    };
+    
+    const getOtherText = (jsonStr) => {
+      try {
+        const obj = JSON.parse(jsonStr);
+        return obj && obj.other ? obj.other : (obj && obj.others ? obj.others : '');
+      } catch(e) { return ''; }
+    };
+    
+    const getDetailsText = (jsonStr) => {
+      try {
+        const obj = JSON.parse(jsonStr);
+        return obj && obj.details ? obj.details : '';
+      } catch(e) { return ''; }
+    };
+
+    // Build body map dots SVGs
+    let anteriorDotsHTML = '';
+    let posteriorDotsHTML = '';
+    try {
+      const dots = JSON.parse(c.body_map_data_json || '[]');
+      dots.forEach(d => {
+        const circle = `<circle cx="${d.x}%" cy="${d.y}%" r="5" fill="#ef4444" stroke="#ffffff" stroke-width="1.5" />`;
+        if (d.type === 'anterior') anteriorDotsHTML += circle;
+        else posteriorDotsHTML += circle;
+      });
+    } catch(e){}
+
+    const anteriorSVG = `
+      <svg viewBox="0 0 200 300" style="width:180px; height:270px; background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px;">
+        <circle cx="100" cy="35" r="18" fill="#e2e8f0" stroke="#475569" stroke-width="2" />
+        <path d="M 75,60 C 65,60 55,75 50,90 C 45,105 40,130 45,140 C 48,145 53,142 55,135 L 68,95 C 68,120 70,160 72,190 L 60,280 C 58,290 73,290 75,280 L 88,195 L 100,195 L 112,195 L 125,280 C 127,290 142,290 140,280 L 128,190 C 130,160 132,120 132,95 L 145,135 C 147,142 152,145 155,140 C 160,130 155,105 150,90 C 145,75 135,60 125,60 Z" fill="#e2e8f0" stroke="#475569" stroke-width="2" />
+        ${anteriorDotsHTML}
+      </svg>
+    `;
+
+    const posteriorSVG = `
+      <svg viewBox="0 0 200 300" style="width:180px; height:270px; background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px;">
+        <circle cx="100" cy="35" r="18" fill="#e2e8f0" stroke="#475569" stroke-width="2" />
+        <path d="M 75,60 C 65,60 55,75 50,90 C 45,105 40,130 45,140 C 48,145 53,142 55,135 L 68,95 C 68,120 70,160 72,190 L 60,280 C 58,290 73,290 75,280 L 88,195 L 100,195 L 112,195 L 125,280 C 127,290 142,290 140,280 L 128,190 C 130,160 132,120 132,95 L 145,135 C 147,142 152,145 155,140 C 160,130 155,105 150,90 C 145,75 135,60 125,60 Z" fill="#e2e8f0" stroke="#475569" stroke-width="2" />
+        <line x1="100" y1="60" x2="100" y2="190" stroke="#475569" stroke-dasharray="3,3" stroke-width="1.5"/>
+        ${posteriorDotsHTML}
+      </svg>
+    `;
+
+    const win = window.open('', '_blank');
+    win.document.write(`
+      <html>
+      <head>
+        <title>Patient Record Card - ${p ? p.name : 'Clinical Record'}</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+          body { font-family: 'Inter', sans-serif; font-size: 11px; line-height: 1.4; color: #000; padding: 1.5cm; }
+          .header-table { width: 100%; border-bottom: 3px solid #1e3a8a; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+          .section-title { background: #1e3a8a; color: #fff; padding: 4px 8px; font-weight: bold; font-size: 12px; margin-top: 1.2rem; text-transform: uppercase; }
+          .grid-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+          .grid-table td { padding: 5px; border: 1px solid #cbd5e1; }
+          .check-item { display: inline-flex; align-items: center; margin-right: 15px; }
+          .checkbox { font-size: 14px; margin-right: 4px; font-family: monospace; }
+          .text-line { border-bottom: 1px solid #000; display: inline-block; min-width: 150px; }
+          .med-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+          .med-table th, .med-table td { border: 1px solid #000; padding: 6px; text-align: left; }
+          .med-table th { background: #f1f5f9; }
+          .page-break { page-break-before: always; }
+        </style>
+      </head>
+      <body>
+        <!-- Header -->
+        <table class="header-table">
+          <tr>
+            <td>
+              ${logo}
+              <h2 style="margin:0; color:#1e3a8a; font-size:18px;">${cName}</h2>
+              <p style="margin:2px 0 0 0; color:#475569; font-size:10px;">${cAdd}<br>Tel: ${cContact} | Email: ${cEmail}</p>
+            </td>
+            <td style="text-align:right; vertical-align:bottom; font-size:12px;">
+              <strong>PATIENT RECORD CARD</strong><br><br>
+              Record No: <span class="text-line" style="min-width:80px; text-align:center;">${c.patient_id}</span><br>
+              Date: <span class="text-line" style="min-width:80px; text-align:center;">${new Date(c.created_at).toLocaleDateString()}</span>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Demographics -->
+        <div class="section-title">Patient Demographics</div>
+        <table class="grid-table">
+          <tr>
+            <td colspan="2"><strong>Full Name:</strong> ${p ? p.name : 'Unknown'}</td>
+            <td><strong>Sex:</strong> 
+              <span class="check-item"><span class="checkbox">${c.gender === 'Male' ? '☒' : '☐'}</span> M</span>
+              <span class="check-item"><span class="checkbox">${c.gender === 'Female' ? '☒' : '☐'}</span> F</span>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Date of Birth:</strong> ${p ? p.dob || 'N/A' : 'N/A'}</td>
+            <td><strong>Age:</strong> ${p ? p.age || 'N/A' : 'N/A'}</td>
+            <td><strong>Occupation:</strong> ${p ? p.occupation || 'N/A' : 'N/A'}</td>
+          </tr>
+          <tr>
+            <td colspan="2"><strong>Address:</strong> ${p ? p.address || 'N/A' : 'N/A'}</td>
+            <td><strong>Phone No:</strong> ${p ? p.phone || 'N/A' : 'N/A'}</td>
+          </tr>
+          <tr>
+            <td><strong>Next of Kin / Contact:</strong> ${p ? p.nok || 'N/A' : 'N/A'}</td>
+            <td><strong>NOK Phone:</strong> ${p ? p.nok_phone || 'N/A' : 'N/A'}</td>
+            <td><strong>Referred By:</strong> ${c.referred_by || 'None'}</td>
+          </tr>
+          <tr>
+            <td colspan="3"><strong>Visit Type:</strong>
+              <span class="check-item"><span class="checkbox">${c.visit_type === 'New' ? '☒' : '☐'}</span> New</span>
+              <span class="check-item"><span class="checkbox">${c.visit_type === 'Follow-up' ? '☒' : '☐'}</span> Follow-up</span>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Presenting Complaint & History -->
+        <div class="section-title">Presenting Complaint & History</div>
+        <table class="grid-table">
+          <tr>
+            <td colspan="2" style="height:50px; vertical-align:top;">
+              <strong>Presenting Complaint:</strong><br>
+              ${c.primary_complaint || 'None'}
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2" style="height:70px; vertical-align:top;">
+              <strong>History of Presenting Complaint:</strong> <small style="color:#64748b;">(onset, duration, evolution, triggers, itch/pain, prior treatment)</small><br>
+              ${c.history_of_presenting_complaint || 'None'}
+            </td>
+          </tr>
+          <tr>
+            <td style="width:50%; vertical-align:top;">
+              <strong>Past Medical / Dermatological History:</strong><br><br>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.past_history_json, 'allergy')}</span> Allergy (asthma / eczema / rhinitis)</span><br>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.past_history_json, 'diabetes')}</span> Diabetes</span><br>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.past_history_json, 'hypertension')}</span> Hypertension</span><br>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.past_history_json, 'hiv')}</span> HIV</span><br>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.past_history_json, 'autoimmune')}</span> Autoimmune disease</span><br>
+              Other: <span class="text-line" style="min-width:180px;">${getOtherText(c.past_history_json)}</span>
+            </td>
+            <td style="width:50%; vertical-align:top;">
+              <strong>Drug / Allergy History:</strong><br><br>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.drug_history_json, 'known_allergy')}</span> Known drug allergy</span><br>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.drug_history_json, 'current_meds')}</span> Current medications</span><br>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.drug_history_json, 'family_history')}</span> Family history of skin disease</span><br>
+              Details: <span class="text-line" style="min-width:180px;">${getDetailsText(c.drug_history_json)}</span>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Page Break -->
+        <div class="page-break"></div>
+
+        <!-- Skin Examination -->
+        <div class="section-title">Skin Examination</div>
+        <table class="grid-table">
+          <tr>
+            <td style="width:50%; vertical-align:top;">
+              <strong>Morphology:</strong><br><br>
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'macule')}</span> Macule</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'papule')}</span> Papule</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'plaque')}</span> Plaque</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'nodule')}</span> Nodule</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'vesicle')}</span> Vesicle</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'bulla')}</span> Bulla</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'pustule')}</span> Pustule</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'wheal')}</span> Wheal</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'scale')}</span> Scale</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'ulcer')}</span> Ulcer</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'crust')}</span> Crust</div>
+                <div><span class="checkbox">${parseChecked(c.morphology_json, 'atrophy')}</span> Atrophy</div>
+              </div>
+              <div style="margin-top:10px;">Other: <span class="text-line" style="min-width:180px;">${getOtherText(c.morphology_json)}</span></div>
+            </td>
+            <td style="width:50%; vertical-align:top;">
+              <strong>Distribution / Pattern:</strong><br><br>
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                <div><span class="checkbox">${parseChecked(c.distribution_json, 'localised')}</span> Localised</div>
+                <div><span class="checkbox">${parseChecked(c.distribution_json, 'generalised')}</span> Generalised</div>
+                <div><span class="checkbox">${parseChecked(c.distribution_json, 'symmetrical')}</span> Symmetrical</div>
+                <div><span class="checkbox">${parseChecked(c.distribution_json, 'asymmetrical')}</span> Asymmetrical</div>
+                <div><span class="checkbox">${parseChecked(c.distribution_json, 'flexural')}</span> Flexural</div>
+                <div><span class="checkbox">${parseChecked(c.distribution_json, 'extensor')}</span> Extensor</div>
+                <div><span class="checkbox">${parseChecked(c.distribution_json, 'sun_exposed')}</span> Sun-exposed</div>
+                <div><span class="checkbox">${parseChecked(c.distribution_json, 'mucosal')}</span> Mucosal</div>
+              </div>
+              <div style="margin-top:10px;">Others: <span class="text-line" style="min-width:180px;">${getOtherText(c.distribution_json)}</span></div>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="2"><strong>Site(s) Affected:</strong> ${c.site_affected || 'None'}</td>
+          </tr>
+          <tr>
+            <td colspan="2"><strong>Additional Findings:</strong> <small style="color:#64748b;">(hair, nails, mucosae, lymph nodes)</small><br>${c.additional_findings || 'None'}</td>
+          </tr>
+          <tr>
+            <td colspan="2" style="text-align:center;">
+              <div style="display:flex; justify-content:center; gap:2cm; padding:10px 0;">
+                <div>
+                  <div style="font-weight:bold; margin-bottom:5px;">Anterior (Front) Body Map</div>
+                  ${anteriorSVG}
+                </div>
+                <div>
+                  <div style="font-weight:bold; margin-bottom:5px;">Posterior (Back) Body Map</div>
+                  ${posteriorSVG}
+                </div>
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Assessment -->
+        <div class="section-title">Assessment</div>
+        <table class="grid-table">
+          <tr>
+            <td><strong>Working Diagnosis:</strong> ${c.working_diagnosis || 'None'}</td>
+            <td><strong>Differential Diagnosis:</strong> ${c.differential_diagnosis || 'None'}</td>
+          </tr>
+          <tr>
+            <td colspan="2">
+              <strong>Investigations Ordered:</strong> &nbsp;&nbsp;&nbsp;&nbsp;
+              <span class="check-item"><span class="checkbox">${parseChecked(c.investigations_ordered_json, 'scraping')}</span> Skin scraping</span>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.investigations_ordered_json, 'biopsy')}</span> Biopsy</span>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.investigations_ordered_json, 'bloods')}</span> Bloods</span>
+              <span class="check-item"><span class="checkbox">${parseChecked(c.investigations_ordered_json, 'culture')}</span> Culture</span>
+              &nbsp;&nbsp; Other: <span class="text-line" style="min-width:100px;">${getOtherText(c.investigations_ordered_json)}</span>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Treatment Plan -->
+        <div class="section-title">Treatment Plan</div>
+        <table class="med-table">
+          <thead>
+            <tr>
+              <th style="width:40%;">Medication / Treatment</th>
+              <th style="width:20%;">Dose / Strength</th>
+              <th style="width:40%;">Directions & Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${myRx.length ? myRx.map(rx => `
+              <tr>
+                <td><strong>${rx.drug_name}</strong></td>
+                <td>${rx.frequency}</td>
+                <td>${rx.route} - ${rx.duration}<br><small>${rx.instructions}</small></td>
+              </tr>
+            `).join('') : '<tr><td colspan="3" style="text-align:center; color:#64748b;">No medications prescribed.</td></tr>'}
+          </tbody>
+        </table>
+        
+        <table class="grid-table" style="margin-top:0.5rem;">
+          <tr>
+            <td colspan="2"><strong>Patient Education / Counseling Given:</strong><br>${c.patient_education || 'None'}</td>
+          </tr>
+          <tr>
+            <td style="width:50%;">
+              <strong>Next Appointment:</strong><br>
+              Date: <span class="text-line" style="min-width:100px;">${c.next_appointment_date || 'N/A'}</span><br><br>
+              Type: 
+              <span class="check-item"><span class="checkbox">${c.next_appointment_type === 'Routine' ? '☒' : '☐'}</span> Routine</span>
+              <span class="check-item"><span class="checkbox">${c.next_appointment_type === 'Urgent review' ? '☒' : '☐'}</span> Urgent review</span>
+            </td>
+            <td style="width:50%; vertical-align:bottom; text-align:center; height:60px;">
+              <span class="text-line" style="min-width:180px; font-weight:bold;">Dr. ${c.doctor_name || 'Clinician'}</span><br>
+              Clinician Name & Signature
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `);
+    win.document.close();
+    setTimeout(()=>win.print(), 800);
+  } catch(e) {
+    toast(e.message);
+  }
+}
+
 window.openAddPatientModal = function() {
   showModal(`
     <div class="modal">
@@ -1157,29 +1512,42 @@ function renderDocQueue(container) {
       <h3>Pending Consultations</h3>
       <div class="table-wrap" style="margin-top:1rem;">
         <table>
-          <thead><tr><th>Time</th><th>Patient</th><th>Purpose</th><th>Actions</th></tr></thead>
-          <tbody id="docAppTb"><tr><td colspan="4">Loading...</td></tr></tbody>
+          <thead><tr><th>Time</th><th>Patient</th><th>Purpose</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="docAppTb"><tr><td colspan="5">Loading...</td></tr></tbody>
         </table>
       </div>
     </div>
   `;
 
-  const apps = allAppointments.filter(a => a.status === 'Approved' || a.status === 'Scheduled' || a.status === 'Rescheduled');
+  const apps = allAppointments.filter(a => 
+    a.status === 'Approved' || 
+    a.status === 'Scheduled' || 
+    a.status === 'Rescheduled' || 
+    a.status === 'Awaiting Lab Results' || 
+    a.status === 'Lab Results Received'
+  );
   document.getElementById('docAppTb').innerHTML = apps.map(a => `
     <tr>
       <td>${a.date} <br><small style="color:#64748b;">${a.time}</small></td>
       <td><strong>${a.patient_name}</strong></td>
       <td>${a.purpose}</td>
       <td>
+        <span class="badge" style="background:${a.status==='Lab Results Received'?'#10b981':a.status==='Awaiting Lab Results'?'#3b82f6':'#64748b'}; color:white; font-size:11px; padding:3px 8px; border-radius:4px;">
+          ${a.status}
+        </span>
+      </td>
+      <td>
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-          ${a.status !== 'Approved' ? `<button class="btn btn-sm" style="background:#16a34a; color:white; border:none;" onclick="approveApp(this, '${a.id}')">Approve</button>` : ''}
+          ${a.status !== 'Approved' && a.status !== 'Awaiting Lab Results' && a.status !== 'Lab Results Received' ? `<button class="btn btn-sm" style="background:#16a34a; color:white; border:none;" onclick="approveApp(this, '${a.id}')">Approve</button>` : ''}
           <button class="btn btn-sm" style="background:#eab308; color:white; border:none;" onclick="rescheduleApp('${a.id}')">Reschedule</button>
-          <button class="btn btn-sm btn-primary" onclick="startConsultation('${a.id}', '${a.patient_id}')">Start Consultation</button>
+          <button class="btn btn-sm btn-primary" onclick="startConsultation('${a.id}', '${a.patient_id}')">
+            ${a.status === 'Awaiting Lab Results' || a.status === 'Lab Results Received' ? 'Resume Consultation' : 'Start Consultation'}
+          </button>
         </div>
       </td>
     </tr>
   `).join('');
-  if (apps.length===0) document.getElementById('docAppTb').innerHTML='<tr><td colspan="4" style="text-align:center; padding:2rem;">No pending appointments</td></tr>';
+  if (apps.length===0) document.getElementById('docAppTb').innerHTML='<tr><td colspan="5" style="text-align:center; padding:2rem;">No pending appointments</td></tr>';
 }
 
 function renderDocHistory(container) {
@@ -1270,70 +1638,208 @@ function renderDocConsultation(container) {
   const labOpts = labCatalog.map(l => `<label class="checkbox-item"><input type="checkbox" name="c_lab" value="${l.id}" data-name="${l.test_name}" data-price="${l.price}"> ${l.test_name}</label>`).join('');
   const txOpts = treatmentCatalog.map(t => `<label class="checkbox-item"><input type="checkbox" name="c_tx" value="${t.id}" data-name="${t.treatment_name}" data-price="${t.price}"> ${t.treatment_name}</label>`).join('');
   window.docMedCount = 1;
+  window.bodyMapDots = [];
 
   container.innerHTML = `
+    <!-- SECTION 1: DEMOGRAPHIC INFO -->
     <div class="card" style="margin-bottom:1.5rem;">
-      <h3 style="color:#64748b; font-size:0.9rem; letter-spacing:0.05em; margin-bottom:1rem;">PATIENT</h3>
+      <h3 style="color:var(--primary); font-size:1.1rem; margin-bottom:1rem; text-transform:uppercase; letter-spacing:0.05em; border-bottom:2px solid var(--border-color); padding-bottom:0.5rem;"><i class="fas fa-id-card"></i> 1. Patient Demographics</h3>
+      
+      <div style="background:#f8fafc; padding:1.2rem; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:1.2rem; display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:1.2rem; font-size:14px;">
+        <div><strong>Patient Name:</strong> <span style="color:#334155;">${p.name}</span></div>
+        <div><strong>Age / Date of Birth:</strong> <span style="color:#334155;">${p.age || 'N/A'} yrs / ${p.dob || 'N/A'}</span></div>
+        <div><strong>Gender:</strong> <span style="color:#334155;">${p.gender || 'Not specified'}</span></div>
+        <div><strong>Phone No:</strong> <span style="color:#334155;">${p.phone || 'N/A'}</span></div>
+        <div style="grid-column: 1 / -1;"><strong>Residential Address:</strong> <span style="color:#334155;">${p.address || 'N/A'}</span></div>
+      </div>
+
       <div class="form-grid">
-        <div class="form-group"><label>Select Patient</label><input type="text" value="${p.name}" disabled style="background:#f1f5f9; color:#475569;"></div>
-        <div class="form-group"><label>Doctor's Notes</label><textarea id="cf_notes" rows="2" placeholder="Clinical observations and notes..." style="background:#f1f5f9; border:1px solid #cbd5e1;"></textarea></div>
+        <div class="form-group">
+          <label>Sex (On Record Card)</label>
+          <div style="display:flex; gap:1.5rem; padding:0.5rem 0;">
+            <label class="checkbox-item"><input type="radio" name="cf_gender" value="Male" ${p.gender==='Male'?'checked':''}> Male</label>
+            <label class="checkbox-item"><input type="radio" name="cf_gender" value="Female" ${p.gender==='Female'?'checked':''}> Female</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Visit Type</label>
+          <div style="display:flex; gap:1.5rem; padding:0.5rem 0;">
+            <label class="checkbox-item"><input type="radio" name="cf_visit" value="New" checked> New Visit</label>
+            <label class="checkbox-item"><input type="radio" name="cf_visit" value="Follow-up"> Follow-up Visit</label>
+          </div>
+        </div>
+        <div class="form-group"><label>Referred By</label><input type="text" id="cf_ref" placeholder="Referred by physician or other source..."></div>
+        <div class="form-group"><label>Occupation</label><input type="text" id="cf_occupation" placeholder="Patient's occupation..."></div>
+        <div class="form-group"><label>Next of Kin / Contact</label><input type="text" id="cf_nok" placeholder="NOK Name & relationship..." value="${p.nok || ''}"></div>
+        <div class="form-group"><label>NOK Phone No.</label><input type="text" id="cf_nok_phone" placeholder="NOK telephone..." value="${p.nok_phone || ''}"></div>
       </div>
     </div>
 
+    <!-- SECTION 2: PRESENTING COMPLAINT & HISTORY -->
     <div class="card" style="margin-bottom:1.5rem;">
-      <h3 style="color:#3b82f6; font-size:0.9rem; letter-spacing:0.05em; margin-bottom:1rem;">1 - AGE GROUP</h3>
-      <div style="display:flex; gap:2rem; flex-wrap:wrap;">
-        <label class="checkbox-item"><input type="radio" name="cf_age" value="0-5 years"> 0-5 years</label>
-        <label class="checkbox-item"><input type="radio" name="cf_age" value="5-14 years"> 5-14 years</label>
-        <label class="checkbox-item"><input type="radio" name="cf_age" value="15-24 years"> 15-24 years</label>
-        <label class="checkbox-item"><input type="radio" name="cf_age" value="25-34 years"> 25-34 years</label>
-        <label class="checkbox-item"><input type="radio" name="cf_age" value="35-49 years"> 35-49 years</label>
-        <label class="checkbox-item"><input type="radio" name="cf_age" value="50-64 years"> 50-64 years</label>
-        <label class="checkbox-item"><input type="radio" name="cf_age" value="≥65 years"> ≥65 years</label>
-        <label class="checkbox-item"><input type="radio" name="cf_age" value="Unknown"> Unknown</label>
+      <h3 style="color:var(--primary); font-size:1.1rem; margin-bottom:1rem; text-transform:uppercase; letter-spacing:0.05em; border-bottom:2px solid var(--border-color); padding-bottom:0.5rem;"><i class="fas fa-history"></i> 2. Presenting Complaint & History</h3>
+      
+      <div class="form-group">
+        <label>Presenting Complaint</label>
+        <textarea id="cf_primary" rows="2" placeholder="Primary complaint described by the patient..."></textarea>
       </div>
-    </div>
 
-    <div class="consult-grid">
-      <div class="card">
-        <h3 style="color:#3b82f6; font-size:0.9rem; letter-spacing:0.05em; margin-bottom:1rem;">2 - GENDER</h3>
-        <div style="display:flex; flex-direction:column; gap:0.5rem;">
-          <label class="checkbox-item"><input type="radio" name="cf_gender" value="Male"> Male</label>
-          <label class="checkbox-item"><input type="radio" name="cf_gender" value="Female"> Female</label>
-          <label class="checkbox-item"><input type="radio" name="cf_gender" value="Not disclosed"> Not disclosed</label>
+      <div class="form-group">
+        <label>History of Presenting Complaint (Onset, duration, evolution, triggers, itch/pain, prior treatment)</label>
+        <textarea id="cf_history" rows="3" placeholder="Describe the chronological history of the skin condition, including onset, duration, triggers, itch/pain level, prior treatments, etc..."></textarea>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:1.5rem; margin-top:1.5rem;">
+        <div style="background:#f8fafc; padding:1.2rem; border-radius:8px; border:1px solid #e2e8f0;">
+          <strong style="display:block; margin-bottom:0.8rem; color:#1e293b; font-size:14px;">Past Medical / Dermatological History</strong>
+          <div style="display:grid; grid-template-columns:1fr; gap:0.5rem;">
+            <label class="checkbox-item"><input type="checkbox" id="ph_allergy"> Allergy (asthma / eczema / rhinitis)</label>
+            <label class="checkbox-item"><input type="checkbox" id="ph_diabetes"> Diabetes</label>
+            <label class="checkbox-item"><input type="checkbox" id="ph_hypertension"> Hypertension</label>
+            <label class="checkbox-item"><input type="checkbox" id="ph_hiv"> HIV</label>
+            <label class="checkbox-item"><input type="checkbox" id="ph_autoimmune"> Autoimmune disease</label>
+            <div style="margin-top:0.3rem;">
+              <label style="font-size:12px; font-weight:500;">Other History Detail:</label>
+              <input type="text" id="ph_other_val" placeholder="Specify other conditions..." style="padding:0.4rem; font-size:13px; margin-top:3px;">
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#f8fafc; padding:1.2rem; border-radius:8px; border:1px solid #e2e8f0;">
+          <strong style="display:block; margin-bottom:0.8rem; color:#1e293b; font-size:14px;">Drug / Allergy History</strong>
+          <div style="display:grid; grid-template-columns:1fr; gap:0.5rem;">
+            <label class="checkbox-item"><input type="checkbox" id="dh_allergy"> Known drug allergy (specify below)</label>
+            <label class="checkbox-item"><input type="checkbox" id="dh_meds"> Current medications (specify below)</label>
+            <label class="checkbox-item"><input type="checkbox" id="dh_family"> Family history of skin disease</label>
+            <div style="margin-top:0.5rem;">
+              <label style="font-size:12px; font-weight:500;">Details / Meds / Allergies List:</label>
+              <textarea id="dh_details" rows="2" placeholder="List specific drug allergies, current treatments, or family history..." style="font-size:13px; padding:0.5rem; margin-top:3px;"></textarea>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="card">
-        <h3 style="color:#3b82f6; font-size:0.9rem; letter-spacing:0.05em; margin-bottom:1rem;">3 - RESIDENTIAL ADDRESS</h3>
-        <div style="display:flex; flex-direction:column; gap:0.5rem;">
-          <label class="checkbox-item"><input type="radio" name="cf_res" value="Urban"> Urban</label>
-          <label class="checkbox-item"><input type="radio" name="cf_res" value="Peri-urban"> Peri-urban</label>
-          <label class="checkbox-item"><input type="radio" name="cf_res" value="Rural"> Rural</label>
-          <label class="checkbox-item"><input type="radio" name="cf_res" value="Unknown"> Unknown</label>
+    </div>
+
+    <!-- SECTION 3: SKIN EXAMINATION & BODY MAP -->
+    <div class="card" style="margin-bottom:1.5rem;">
+      <h3 style="color:var(--primary); font-size:1.1rem; margin-bottom:1rem; text-transform:uppercase; letter-spacing:0.05em; border-bottom:2px solid var(--border-color); padding-bottom:0.5rem;"><i class="fas fa-stethoscope"></i> 3. Skin Examination</h3>
+      
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:1.5rem;">
+        <div style="background:#fcfaf2; padding:1.2rem; border-radius:8px; border:1px solid #fef08a;">
+          <strong style="display:block; margin-bottom:0.8rem; color:#854d0e; font-size:14px;">Morphology</strong>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem;">
+            <label class="checkbox-item"><input type="checkbox" id="m_macule"> Macule</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_papule"> Papule</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_plaque"> Plaque</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_nodule"> Nodule</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_vesicle"> Vesicle</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_bulla"> Primary Bulla</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_pustule"> Pustule</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_wheal"> Wheal</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_scale"> Scale</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_ulcer"> Ulcer</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_crust"> Crust</label>
+            <label class="checkbox-item"><input type="checkbox" id="m_atrophy"> Atrophy</label>
+          </div>
+          <div style="margin-top:0.8rem;">
+            <label style="font-size:12px; font-weight:500; color:#854d0e;">Other Morphology:</label>
+            <input type="text" id="m_other_val" placeholder="Specify other lesions..." style="padding:0.4rem; font-size:13px; margin-top:3px; background:#fff;">
+          </div>
+        </div>
+
+        <div style="background:#f2fcfc; padding:1.2rem; border-radius:8px; border:1px solid #a5f3fc;">
+          <strong style="display:block; margin-bottom:0.8rem; color:#0e7490; font-size:14px;">Distribution / Pattern</strong>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.4rem;">
+            <label class="checkbox-item"><input type="checkbox" id="d_localised"> Localised</label>
+            <label class="checkbox-item"><input type="checkbox" id="d_generalised"> Generalised</label>
+            <label class="checkbox-item"><input type="checkbox" id="d_symmetrical"> Symmetrical</label>
+            <label class="checkbox-item"><input type="checkbox" id="d_asymmetrical"> Asymmetrical</label>
+            <label class="checkbox-item"><input type="checkbox" id="d_flexural"> Flexural</label>
+            <label class="checkbox-item"><input type="checkbox" id="d_extensor"> Extensor</label>
+            <label class="checkbox-item"><input type="checkbox" id="d_sun_exposed"> Sun-exposed</label>
+            <label class="checkbox-item"><input type="checkbox" id="d_mucosal"> Mucosal involvement</label>
+          </div>
+          <div style="margin-top:0.8rem;">
+            <label style="font-size:12px; font-weight:500; color:#0e7490;">Others:</label>
+            <input type="text" id="d_others_val" placeholder="Specify other pattern..." style="padding:0.4rem; font-size:13px; margin-top:3px; background:#fff;">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-top:1.5rem;">
+        <div class="form-group"><label>Site(s) Affected</label><input type="text" id="cf_site" placeholder="Describe anatomical sites (e.g. face, scalp, back of hands)..."></div>
+        <div class="form-group"><label>Additional Findings (hair, nails, mucosae, lymph nodes)</label><input type="text" id="cf_findings" placeholder="Observe and record nail changes, hair loss, lymphadenopathy, etc..."></div>
+      </div>
+
+      <!-- Body Map Interactive SVGs -->
+      <div style="margin-top:1.5rem; background:#f8fafc; padding:1.2rem; border-radius:8px; border:1px solid #cbd5e1; text-align:center;">
+        <strong style="display:block; margin-bottom:0.5rem; font-size:15px; color:#1e293b;"><i class="fas fa-male"></i> Interactive Body Map</strong>
+        <p style="font-size:12px; color:#64748b; margin-bottom:1rem;">Click on the figures below to place red lesion marker dots. Click a dot again to remove it.</p>
+        
+        <div style="display:flex; justify-content:center; gap:2.5rem; flex-wrap:wrap; margin:1rem 0;">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:0.5rem;">
+            <span style="font-weight:600; font-size:13px; color:#475569;">Anterior (Front)</span>
+            <div style="position:relative; width:200px; height:300px;">
+              <svg id="svg-anterior" class="body-silhouette" viewBox="0 0 200 300" onclick="window.addBodyMapDot(event, 'anterior')" style="width:200px; height:300px; background:#fff; border:2px solid #cbd5e1; border-radius:12px; cursor:crosshair; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+                <circle cx="100" cy="35" r="18" fill="#e2e8f0" stroke="#475569" stroke-width="2" />
+                <path d="M 75,60 C 65,60 55,75 50,90 C 45,105 40,130 45,140 C 48,145 53,142 55,135 L 68,95 C 68,120 70,160 72,190 L 60,280 C 58,290 73,290 75,280 L 88,195 L 100,195 L 112,195 L 125,280 C 127,290 142,290 140,280 L 128,190 C 130,160 132,120 132,95 L 145,135 C 147,142 152,145 155,140 C 160,130 155,105 150,90 C 145,75 135,60 125,60 Z" fill="#e2e8f0" stroke="#475569" stroke-width="2" />
+                <g id="anterior-dots"></g>
+              </svg>
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:0.5rem;">
+            <span style="font-weight:600; font-size:13px; color:#475569;">Posterior (Back)</span>
+            <div style="position:relative; width:200px; height:300px;">
+              <svg id="svg-posterior" class="body-silhouette" viewBox="0 0 200 300" onclick="window.addBodyMapDot(event, 'posterior')" style="width:200px; height:300px; background:#fff; border:2px solid #cbd5e1; border-radius:12px; cursor:crosshair; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+                <circle cx="100" cy="35" r="18" fill="#e2e8f0" stroke="#475569" stroke-width="2" />
+                <path d="M 75,60 C 65,60 55,75 50,90 C 45,105 40,130 45,140 C 48,145 53,142 55,135 L 68,95 C 68,120 70,160 72,190 L 60,280 C 58,290 73,290 75,280 L 88,195 L 100,195 L 112,195 L 125,280 C 127,290 142,290 140,280 L 128,190 C 130,160 132,120 132,95 L 145,135 C 147,142 152,145 155,140 C 160,130 155,105 150,90 C 145,75 135,60 125,60 Z" fill="#e2e8f0" stroke="#475569" stroke-width="2" />
+                <line x1="100" y1="60" x2="100" y2="190" stroke="#475569" stroke-dasharray="3,3" stroke-width="1.5"/>
+                <g id="posterior-dots"></g>
+              </svg>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
+    <!-- SECTION 4: ASSESSMENT -->
     <div class="card" style="margin-bottom:1.5rem;">
-      <h3 style="color:#475569; font-size:0.9rem; letter-spacing:0.05em; margin-bottom:1rem;">DIAGNOSIS & EXAMS</h3>
+      <h3 style="color:var(--primary); font-size:1.1rem; margin-bottom:1rem; text-transform:uppercase; letter-spacing:0.05em; border-bottom:2px solid var(--border-color); padding-bottom:0.5rem;"><i class="fas fa-file-medical-alt"></i> 4. Assessment</h3>
       <div class="form-grid">
-        <div class="form-group"><label>Primary Presenting Complaint</label><input id="cf_primary"></div>
-        <div class="form-group"><label>Working Diagnosis</label><input id="cf_diag"></div>
+        <div class="form-group"><label>Working Diagnosis</label><input id="cf_diag" placeholder="Primary diagnosed dermatological condition..."></div>
+        <div class="form-group"><label>Differential Diagnosis</label><input id="cf_diff_diag" placeholder="Possible secondary or rule-out diagnoses..."></div>
       </div>
-      <h4 style="margin-top:1rem; font-size:0.85rem; color:#64748b;">Lab Orders (Check to order)</h4>
-      <div class="checklist-grid" style="background:#fdf2f8; padding:1rem; border-radius:8px;">${labOpts}</div>
-      <h4 style="margin-top:1rem; font-size:0.85rem; color:#64748b;">Clinical Treatments (By Nurse)</h4>
-      <div class="checklist-grid" style="background:#f5f3ff; padding:1rem; border-radius:8px;">${txOpts}</div>
+      
+      <div style="margin-top:1rem; background:#f8fafc; padding:1.2rem; border-radius:8px; border:1px solid #cbd5e1;">
+        <strong style="display:block; margin-bottom:0.8rem; color:#1e293b; font-size:14px;">Investigations Ordered</strong>
+        <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-bottom:0.8rem;">
+          <label class="checkbox-item"><input type="checkbox" id="inv_scraping"> Skin scraping</label>
+          <label class="checkbox-item"><input type="checkbox" id="inv_biopsy"> Biopsy</label>
+          <label class="checkbox-item"><input type="checkbox" id="inv_bloods"> Bloods</label>
+          <label class="checkbox-item"><input type="checkbox" id="inv_culture"> Culture</label>
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:500;">Other Lab/Clinic Investigation:</label>
+          <input type="text" id="inv_other_val" placeholder="Specify other tests ordered..." style="padding:0.4rem; font-size:13px; margin-top:3px; background:#fff;">
+        </div>
+      </div>
+
+      <h4 style="margin-top:1.5rem; font-size:0.85rem; color:#64748b; font-weight:600;">Lab Orders (Dispatched to Clinic Lab Catalog)</h4>
+      <div class="checklist-grid" style="background:#fdf2f8; padding:1rem; border-radius:8px; border:1px solid #fbcfe8;">${labOpts}</div>
+      <h4 style="margin-top:1rem; font-size:0.85rem; color:#64748b; font-weight:600;">Clinical Treatments (Ordered by Doctor, executed by Nurse)</h4>
+      <div class="checklist-grid" style="background:#f5f3ff; padding:1rem; border-radius:8px; border:1px solid #ddd6fe;">${txOpts}</div>
     </div>
 
+    <!-- SECTION 5: TREATMENT PLAN (MEDS) -->
     <div class="card" style="margin-bottom:1.5rem;">
-      <h3 style="color:#0f172a; font-size:1rem; margin-bottom:1rem;">MEDICATIONS</h3>
-      <div id="medBuilder" style="background:#f8fafc; padding:1rem; border-radius:8px;">
+      <h3 style="color:var(--primary); font-size:1.1rem; margin-bottom:1rem; text-transform:uppercase; letter-spacing:0.05em; border-bottom:2px solid var(--border-color); padding-bottom:0.5rem;"><i class="fas fa-pills"></i> 5. Prescription & Treatment Plan</h3>
+      
+      <div id="medBuilder" style="background:#f8fafc; padding:1rem; border-radius:8px; border:1px solid #cbd5e1;">
         <div class="form-grid" id="medrow_1">
-          <div class="form-group"><label>Medication</label>
+          <div class="form-group"><label>Medication / Treatment</label>
             <select class="med-sel"><option value="">Select...</option>${dOpts}</select>
           </div>
-          <div class="form-group"><label>Dose</label><input type="text" class="med-dose" placeholder="e.g. 10mg / thin layer"></div>
+          <div class="form-group"><label>Dose / Strength</label><input type="text" class="med-dose" placeholder="e.g. 10mg / thin layer"></div>
           <div class="form-group"><label>Frequency</label>
             <select class="med-freq">
               <option>Select...</option><option>Once Daily (OD)</option><option>Twice Daily (BD)</option><option>Three Times Daily (TDS)</option>
@@ -1366,41 +1872,228 @@ function renderDocConsultation(container) {
           </div>
         </div>
       </div>
-      <button class="btn btn-sm btn-secondary" style="margin-top:1rem;" onclick="addMedRow()">+ Add Medication</button>
-    </div>
+      <button class="btn btn-sm btn-secondary" style="margin-top:1rem;" onclick="window.addMedRow()">+ Add Medication</button>
 
-    <div class="card" style="margin-bottom:1.5rem;">
-      <h3 style="color:#64748b; font-size:0.9rem; letter-spacing:0.05em; margin-bottom:1rem;">10 - FOLLOW-UP PLAN</h3>
-      <div class="follow-up-grid">
+      <div class="form-group" style="margin-top:1.5rem;">
+        <label>Patient Education / Counseling Given</label>
+        <textarea id="cf_education" rows="2" placeholder="Counseling notes on skin hygiene, hydration, sunscreens, or avoidance triggers..."></textarea>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:1.5rem; margin-top:1.5rem; background:#f8fafc; padding:1.2rem; border-radius:8px; border:1px solid #cbd5e1;">
         <div>
-          <div style="font-weight:600; margin-bottom:0.5rem; font-size:0.9rem;">Follow-up needed?</div>
-          <div style="display:flex; gap:1.5rem;">
-            <label class="checkbox-item"><input type="radio" name="cf_fup" value="Yes"> Yes</label>
-            <label class="checkbox-item"><input type="radio" name="cf_fup" value="No"> No</label>
-            <label class="checkbox-item"><input type="radio" name="cf_fup" value="Patient to return only if not improving"> Patient to return only if not improving</label>
+          <label style="font-weight:600; display:block; margin-bottom:0.5rem; font-size:13px;">Next Appointment Date</label>
+          <input type="date" id="cf_next_date" style="padding:0.6rem; font-size:14px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; width:100%;">
+        </div>
+        <div>
+          <label style="font-weight:600; display:block; margin-bottom:0.5rem; font-size:13px;">Review Type</label>
+          <div style="display:flex; gap:1.5rem; padding:0.5rem 0;">
+            <label class="checkbox-item"><input type="radio" name="cf_next_type" value="Routine" checked> Routine Review</label>
+            <label class="checkbox-item"><input type="radio" name="cf_next_type" value="Urgent review"> Urgent Review</label>
           </div>
         </div>
         <div>
-          <div style="font-weight:600; margin-bottom:0.5rem; font-size:0.9rem;">Follow-up interval</div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
-            <label class="checkbox-item"><input type="radio" name="cf_fint" value="1 week"> 1 week</label>
-            <label class="checkbox-item"><input type="radio" name="cf_fint" value="2 weeks"> 2 weeks</label>
-            <label class="checkbox-item"><input type="radio" name="cf_fint" value="1 month"> 1 month</label>
-            <label class="checkbox-item"><input type="radio" name="cf_fint" value="3 months"> 3 months</label>
-            <label class="checkbox-item"><input type="radio" name="cf_fint" value="6 months"> 6 months</label>
-            <label class="checkbox-item"><input type="radio" name="cf_fint" value="As needed"> As needed</label>
-          </div>
+          <label style="font-weight:600; display:block; margin-bottom:0.5rem; font-size:13px;">Clinician Signature (Stamping)</label>
+          <input type="text" id="cf_clinician" disabled value="Dr. ${currentUser.name}" style="background:#f1f5f9; color:#475569; padding:0.6rem; font-size:14px; border:1px solid #cbd5e1; border-radius:6px; width:100%;">
         </div>
       </div>
     </div>
 
-    <div style="display:flex; justify-content:flex-end; gap:1rem;">
-      <button class="btn btn-secondary" style="background:#f1f5f9; color:#475569;" onclick="submitFullConsultation(this, 'print')"><i class="fas fa-print"></i> Print Prescription</button>
-      <button class="btn btn-secondary" style="background:#f1f5f9; color:#475569;" onclick="submitFullConsultation(this, 'email')"><i class="fas fa-envelope"></i> Email Patient</button>
-      <button class="btn btn-primary" onclick="submitFullConsultation(this, 'save')" style="background:#1e3a8a; font-weight:600;"><i class="fas fa-check"></i> Save Consultation</button>
+    <!-- SUBMISSION ACTIONS FOOTER -->
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; margin-top:2rem; background:#fff; padding:1.2rem; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+      <div>
+        <button class="btn btn-secondary" style="background:#3b82f6; color:white; border:none; font-weight:600;" onclick="window.submitFullConsultation(this, 'draft')">
+          <i class="fas fa-flask"></i> Send to Lab & Await Results
+        </button>
+      </div>
+      <div style="display:flex; gap:1rem;">
+        <button class="btn btn-secondary" style="background:#f1f5f9; color:#475569;" onclick="window.submitFullConsultation(this, 'print')">
+          <i class="fas fa-print"></i> Save & Print Prescription
+        </button>
+        <button class="btn btn-secondary" style="background:#f1f5f9; color:#475569;" onclick="window.submitFullConsultation(this, 'email')">
+          <i class="fas fa-envelope"></i> Save & Email Patient
+        </button>
+        <button class="btn btn-primary" onclick="window.submitFullConsultation(this, 'save')" style="background:#1e3a8a; font-weight:600;">
+          <i class="fas fa-check"></i> Save Consultation (Final)
+        </button>
+      </div>
     </div>
   `;
+
+  // Try loading draft values
+  setTimeout(() => {
+    window.loadDraftConsultation(activeConsAppId);
+  }, 100);
 }
+
+// Global helpers for body mapping
+window.bodyMapDots = [];
+window.addBodyMapDot = function(e, type) {
+  const svg = e.currentTarget;
+  const rect = svg.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * 100;
+  const y = ((e.clientY - rect.top) / rect.height) * 100;
+  
+  window.bodyMapDots.push({ x, y, type });
+  window.renderBodyMapDots();
+};
+
+window.renderBodyMapDots = function() {
+  const antContainer = document.getElementById('anterior-dots');
+  const postContainer = document.getElementById('posterior-dots');
+  if (!antContainer || !postContainer) return;
+  
+  antContainer.innerHTML = '';
+  postContainer.innerHTML = '';
+  
+  window.bodyMapDots.forEach((dot, index) => {
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("cx", `${dot.x}%`);
+    circle.setAttribute("cy", `${dot.y}%`);
+    circle.setAttribute("r", "6");
+    circle.setAttribute("fill", "#ef4444");
+    circle.setAttribute("stroke", "#ffffff");
+    circle.setAttribute("stroke-width", "1.5");
+    circle.setAttribute("style", "cursor: pointer;");
+    circle.addEventListener("click", (e) => {
+      e.stopPropagation(); // Prevent placing new dot
+      window.bodyMapDots.splice(index, 1);
+      window.renderBodyMapDots();
+    });
+    
+    if (dot.type === 'anterior') {
+      antContainer.appendChild(circle);
+    } else {
+      postContainer.appendChild(circle);
+    }
+  });
+};
+
+// Draft recovery helper
+window.loadDraftConsultation = async function(appId) {
+  try {
+    const draft = await apiFetch(`/consultations/draft/${appId}`);
+    if (draft) {
+      toast("Restored active consultation draft.");
+      
+      // visit type
+      if (draft.visit_type) {
+        const el = document.querySelector(`input[name="cf_visit"][value="${draft.visit_type}"]`);
+        if (el) el.checked = true;
+      }
+      
+      // referred by
+      if (draft.referred_by) document.getElementById('cf_ref').value = draft.referred_by;
+      
+      // presenting complaint
+      if (draft.primary_complaint) document.getElementById('cf_primary').value = draft.primary_complaint;
+      
+      // history of presenting complaint
+      if (draft.history_of_presenting_complaint) {
+        document.getElementById('cf_history').value = draft.history_of_presenting_complaint;
+      }
+      
+      // past history checkboxes
+      if (draft.past_history_json) {
+        try {
+          const ph = JSON.parse(draft.past_history_json);
+          document.getElementById('ph_allergy').checked = !!ph.allergy;
+          document.getElementById('ph_diabetes').checked = !!ph.diabetes;
+          document.getElementById('ph_hypertension').checked = !!ph.hypertension;
+          document.getElementById('ph_hiv').checked = !!ph.hiv;
+          document.getElementById('ph_autoimmune').checked = !!ph.autoimmune;
+          document.getElementById('ph_other_val').value = ph.other || '';
+        } catch(e){}
+      }
+      
+      // drug allergy history
+      if (draft.drug_history_json) {
+        try {
+          const dh = JSON.parse(draft.drug_history_json);
+          document.getElementById('dh_allergy').checked = !!dh.known_allergy;
+          document.getElementById('dh_meds').checked = !!dh.current_meds;
+          document.getElementById('dh_family').checked = !!dh.family_history;
+          document.getElementById('dh_details').value = dh.details || '';
+        } catch(e){}
+      }
+      
+      // morphology
+      if (draft.morphology_json) {
+        try {
+          const morph = JSON.parse(draft.morphology_json);
+          document.getElementById('m_macule').checked = !!morph.macule;
+          document.getElementById('m_papule').checked = !!morph.papule;
+          document.getElementById('m_plaque').checked = !!morph.plaque;
+          document.getElementById('m_nodule').checked = !!morph.nodule;
+          document.getElementById('m_vesicle').checked = !!morph.vesicle;
+          document.getElementById('m_bulla').checked = !!morph.bulla;
+          document.getElementById('m_pustule').checked = !!morph.pustule;
+          document.getElementById('m_wheal').checked = !!morph.wheal;
+          document.getElementById('m_scale').checked = !!morph.scale;
+          document.getElementById('m_ulcer').checked = !!morph.ulcer;
+          document.getElementById('m_crust').checked = !!morph.crust;
+          document.getElementById('m_atrophy').checked = !!morph.atrophy;
+          document.getElementById('m_other_val').value = morph.other || '';
+        } catch(e){}
+      }
+      
+      // distribution
+      if (draft.distribution_json) {
+        try {
+          const dist = JSON.parse(draft.distribution_json);
+          document.getElementById('d_localised').checked = !!dist.localised;
+          document.getElementById('d_generalised').checked = !!dist.generalised;
+          document.getElementById('d_symmetrical').checked = !!dist.symmetrical;
+          document.getElementById('d_asymmetrical').checked = !!dist.asymmetrical;
+          document.getElementById('d_flexural').checked = !!dist.flexural;
+          document.getElementById('d_extensor').checked = !!dist.extensor;
+          document.getElementById('d_sun_exposed').checked = !!dist.sun_exposed;
+          document.getElementById('d_mucosal').checked = !!dist.mucosal;
+          document.getElementById('d_others_val').value = dist.others || '';
+        } catch(e){}
+      }
+      
+      // site affected & findings
+      if (draft.site_affected) document.getElementById('cf_site').value = draft.site_affected;
+      if (draft.additional_findings) document.getElementById('cf_findings').value = draft.additional_findings;
+      
+      // body map
+      if (draft.body_map_data_json) {
+        try {
+          window.bodyMapDots = JSON.parse(draft.body_map_data_json) || [];
+          window.renderBodyMapDots();
+        } catch(e){}
+      }
+      
+      // diagnosis
+      if (draft.working_diagnosis) document.getElementById('cf_diag').value = draft.working_diagnosis;
+      if (draft.differential_diagnosis) document.getElementById('cf_diff_diag').value = draft.differential_diagnosis;
+      
+      // investigations ordered
+      if (draft.investigations_ordered_json) {
+        try {
+          const inv = JSON.parse(draft.investigations_ordered_json);
+          document.getElementById('inv_scraping').checked = !!inv.scraping;
+          document.getElementById('inv_biopsy').checked = !!inv.biopsy;
+          document.getElementById('inv_bloods').checked = !!inv.bloods;
+          document.getElementById('inv_culture').checked = !!inv.culture;
+          document.getElementById('inv_other_val').value = inv.other || '';
+        } catch(e){}
+      }
+      
+      // education
+      if (draft.patient_education) document.getElementById('cf_education').value = draft.patient_education;
+      
+      // next appointment
+      if (draft.next_appointment_type) {
+        const el = document.querySelector(`input[name="cf_next_type"][value="${draft.next_appointment_type}"]`);
+        if (el) el.checked = true;
+      }
+      if (draft.next_appointment_date) {
+        document.getElementById('cf_next_date').value = draft.next_appointment_date;
+      }
+    }
+  } catch(err) { console.error("Error loading draft:", err); }
+};
 
 window.startConsultation = function(appId, patId) {
   activeConsAppId = appId;
@@ -1439,28 +2132,91 @@ window.submitFullConsultation = async function(btn, action) {
     appointment_id: activeConsAppId,
     patient_id: activeConsPatId,
     doctor_id: currentUser.id,
-    age_group: checked('cf_age'),
-    gender: checked('cf_gender'),
-    residence_type: checked('cf_res'),
+    age_group: 'Adult',
+    gender: checked('cf_gender') || 'Not disclosed',
+    residence_type: 'Unknown',
     primary_complaint: document.getElementById('cf_primary').value,
     working_diagnosis: document.getElementById('cf_diag').value,
-    follow_up_needed: checked('cf_fup'),
-    follow_up_interval: checked('cf_fint'),
+    follow_up_needed: document.getElementById('cf_next_date').value ? 'Yes' : 'No',
+    follow_up_interval: checked('cf_next_type') || 'As needed',
     lab_orders: checkedMulti('c_lab').map(el => ({ test_name: el.dataset.name, price: el.dataset.price })),
     clinical_treatments: checkedMulti('c_tx').map(el => ({ treatment_name: el.dataset.name, price: el.dataset.price })),
-    prescriptions: prescriptions
+    prescriptions: prescriptions,
+
+    // New Card Fields
+    visit_type: checked('cf_visit'),
+    referred_by: document.getElementById('cf_ref').value,
+    history_of_presenting_complaint: document.getElementById('cf_history').value,
+    past_history_json: JSON.stringify({
+      allergy: document.getElementById('ph_allergy').checked,
+      diabetes: document.getElementById('ph_diabetes').checked,
+      hypertension: document.getElementById('ph_hypertension').checked,
+      hiv: document.getElementById('ph_hiv').checked,
+      autoimmune: document.getElementById('ph_autoimmune').checked,
+      other: document.getElementById('ph_other_val').value
+    }),
+    drug_history_json: JSON.stringify({
+      known_allergy: document.getElementById('dh_allergy').checked,
+      current_meds: document.getElementById('dh_meds').checked,
+      family_history: document.getElementById('dh_family').checked,
+      details: document.getElementById('dh_details').value
+    }),
+    morphology_json: JSON.stringify({
+      macule: document.getElementById('m_macule').checked,
+      papule: document.getElementById('m_papule').checked,
+      plaque: document.getElementById('m_plaque').checked,
+      nodule: document.getElementById('m_nodule').checked,
+      vesicle: document.getElementById('m_vesicle').checked,
+      bulla: document.getElementById('m_bulla').checked,
+      pustule: document.getElementById('m_pustule').checked,
+      wheal: document.getElementById('m_wheal').checked,
+      scale: document.getElementById('m_scale').checked,
+      ulcer: document.getElementById('m_ulcer').checked,
+      crust: document.getElementById('m_crust').checked,
+      atrophy: document.getElementById('m_atrophy').checked,
+      other: document.getElementById('m_other_val').value
+    }),
+    distribution_json: JSON.stringify({
+      localised: document.getElementById('d_localised').checked,
+      generalised: document.getElementById('d_generalised').checked,
+      symmetrical: document.getElementById('d_symmetrical').checked,
+      asymmetrical: document.getElementById('d_asymmetrical').checked,
+      flexural: document.getElementById('d_flexural').checked,
+      extensor: document.getElementById('d_extensor').checked,
+      sun_exposed: document.getElementById('d_sun_exposed').checked,
+      mucosal: document.getElementById('d_mucosal').checked,
+      others: document.getElementById('d_others_val').value
+    }),
+    site_affected: document.getElementById('cf_site').value,
+    additional_findings: document.getElementById('cf_findings').value,
+    body_map_data_json: JSON.stringify(window.bodyMapDots || []),
+    differential_diagnosis: document.getElementById('cf_diff_diag').value,
+    investigations_ordered_json: JSON.stringify({
+      scraping: document.getElementById('inv_scraping').checked,
+      biopsy: document.getElementById('inv_biopsy').checked,
+      bloods: document.getElementById('inv_bloods').checked,
+      culture: document.getElementById('inv_culture').checked,
+      other: document.getElementById('inv_other_val').value
+    }),
+    patient_education: document.getElementById('cf_education').value,
+    next_appointment_type: checked('cf_next_type'),
+    next_appointment_date: document.getElementById('cf_next_date').value
   };
 
   try {
-    const res = await apiFetch('/consultations', { method:'POST', body: JSON.stringify(payload) });
-    
-    if (action === 'print') {
-      toast("Consultation saved. Generating Prescription...");
-      printPrescription(res.id);
-    } else if (action === 'email') {
-      toast("Consultation saved. Prescription emailed to patient.");
+    if (action === 'draft') {
+      await apiFetch('/consultations/lab_orders_draft', { method: 'POST', body: JSON.stringify(payload) });
+      toast("Draft saved! Patient sent to laboratory queue.");
     } else {
-      toast("Consultation saved. Orders dispatched.");
+      const res = await apiFetch('/consultations', { method:'POST', body: JSON.stringify(payload) });
+      if (action === 'print') {
+        toast("Consultation saved. Generating Prescription...");
+        printPrescription(res.id);
+      } else if (action === 'email') {
+        toast("Consultation saved. Prescription emailed to patient.");
+      } else {
+        toast("Consultation saved. Orders dispatched.");
+      }
     }
 
     activeConsAppId = null;
@@ -1496,7 +2252,10 @@ window.viewHistory = async function(patId) {
                 <div style="border-left:4px solid var(--primary); padding-left:1rem; margin-bottom:1.5rem; background:#fafaf9; padding:1rem; border-radius:4px;">
                   <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:0.5rem; margin-bottom:0.5rem;">
                     <strong>${c.date}</strong>
-                    <button class="btn btn-sm btn-secondary" onclick="printPrescription('${c.id}')">Print Prescription</button>
+                    <div style="display:flex; gap:0.5rem;">
+                      <button class="btn btn-sm btn-secondary" onclick="printPrescription('${c.id}')">Print Rx</button>
+                      <button class="btn btn-sm btn-secondary" style="background:#1e3a8a; color:white; border:none;" onclick="printClinicalRecordCard('${c.id}')"><i class="fas fa-file-medical"></i> Print Record Card</button>
+                    </div>
                   </div>
                   <h4 style="color:var(--primary); margin-bottom:0.5rem;">${c.working_diagnosis || 'No Diagnosis Recorded'}</h4>
                   <p style="font-size:14px; color:#555; margin-bottom:1rem;"><strong>Notes:</strong> ${c.doctor_notes || c.primary_complaint || 'None'}</p>
@@ -1819,7 +2578,7 @@ window.buildPharmacyReceiptHTML = function(paidItems) {
   const cEmail = sysSettings.clinic_email || 'contact@dcmsclinic.com';
   const logo = sysSettings.clinic_logo ? `<img src="${sysSettings.clinic_logo}" style="max-width:250px; max-height:70px; object-fit:contain; margin-bottom:1rem;">` : '';
 
-  const rows = paidItems.map(x => `<tr><td style="padding:0.5rem; border-bottom:1px solid #e2e8f0;">${x.drug_name}</td><td style="padding:0.5rem; border-bottom:1px solid #e2e8f0;">$${(x.price||0).toFixed(2)}</td></tr>`).join('');
+  const rows = paidItems.map(x => `<tr><td style="padding:0.5rem; border-bottom:1px solid #e2e8f0;">${x.drug_name}</td><td style="padding:0.5rem; border-bottom:1px solid #e2e8f0;">Le ${Number(x.price || 0).toLocaleString()}</td></tr>`).join('');
 
   return `
     <html><head><title>Pharmacy Receipt</title>
@@ -1838,7 +2597,7 @@ window.buildPharmacyReceiptHTML = function(paidItems) {
         <tbody>${rows}</tbody>
       </table>
       <div style="margin-top:2rem; text-align:right; font-size:1.2rem;">
-        <strong>Total Paid: $${total.toFixed(2)}</strong>
+        <strong>Total Paid: Le ${Number(total).toLocaleString()}</strong>
       </div>
       <p style="margin-top:3rem; text-align:center; color:#666;">Thank you for your business!</p>
     </body></html>
@@ -2352,7 +3111,8 @@ window.updateSysSettings = async function(btn) {
     { key: 'clinic_email', value: document.getElementById('admClinicEmail').value },
     { key: 'clinic_address', value: document.getElementById('admClinicAddress').value },
     { key: 'clinic_logo', value: window.tempBase64Logo || '' },
-    { key: 'consultation_fee', value: document.getElementById('admConsFee').value }
+    { key: 'consultation_fee', value: document.getElementById('admConsFee').value },
+    { key: 'om_agent_code', value: document.getElementById('admOmAgent').value }
   ];
   
   try {
@@ -2769,7 +3529,16 @@ function renderDocTimeline(container) {
         desc = `Status: ${ev.status} | Reason: ${ev.reason}`;
       } else if (ev.type === 'consultation') {
         icon = 'fa-user-md'; color = '#10b981'; title = 'Consultation';
-        desc = `Diagnosis: ${ev.clinical_diagnosis || 'N/A'}<br>Notes: ${ev.doctors_notes || 'None'}`;
+        desc = `<strong>Working Diagnosis:</strong> ${ev.working_diagnosis || 'N/A'}<br>
+               <strong>Primary Complaint:</strong> ${ev.primary_complaint || 'None'}<br>
+               <div style="margin-top:0.5rem; display:flex; gap:0.5rem;">
+                 <button class="btn btn-sm" style="background:#1e3a8a; color:white; border:none; padding:4px 8px; font-size:11px;" onclick="printClinicalRecordCard('${ev.id}')">
+                   <i class="fas fa-file-medical"></i> Print Record Card
+                 </button>
+                 <button class="btn btn-sm btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="printPrescription('${ev.id}')">
+                   Print Rx
+                 </button>
+               </div>`;
       } else if (ev.type === 'prescription') {
         icon = 'fa-pills'; color = '#f59e0b'; title = 'Prescription Issued';
         desc = `Status: ${ev.status}`;

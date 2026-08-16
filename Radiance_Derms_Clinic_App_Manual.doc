@@ -1,0 +1,319 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' 
+      xmlns:w='urn:schemas-microsoft-com:office:word' 
+      xmlns='http://www.w3.org/TR/REC-html40'>
+<head><title>Radiance Derms - Clinic App Documentation & Manual</title>
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:Zoom>100</w:Zoom>
+<w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  line-height: 1.6;
+  color: #334155;
+  margin: 1in;
+}
+h1 {
+  color: #1e3a8a;
+  font-size: 24pt;
+  border-bottom: 3px solid #1e3a8a;
+  padding-bottom: 8px;
+  margin-top: 30px;
+  margin-bottom: 20px;
+}
+h2 {
+  color: #2563eb;
+  font-size: 18pt;
+  margin-top: 25px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 5px;
+}
+h3 {
+  color: #0f172a;
+  font-size: 14pt;
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+p, li {
+  font-size: 11pt;
+  margin-bottom: 8px;
+}
+ul, ol {
+  margin-top: 5px;
+  margin-bottom: 15px;
+  padding-left: 20px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+  margin-bottom: 15px;
+  font-size: 10pt;
+}
+th, td {
+  border: 1px solid #cbd5e1;
+  padding: 10px;
+  text-align: left;
+}
+th {
+  background-color: #f1f5f9;
+  color: #1e293b;
+  font-weight: bold;
+}
+.code-block {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 12px;
+  font-family: 'Consolas', monospace;
+  font-size: 10pt;
+  margin-top: 10px;
+  margin-bottom: 15px;
+  border-radius: 4px;
+}
+.highlight-box {
+  background-color: #eff6ff;
+  border-left: 5px solid #3b82f6;
+  padding: 15px;
+  margin-top: 15px;
+  margin-bottom: 15px;
+  border-radius: 0 4px 4px 0;
+}
+.alert-box {
+  background-color: #fffbeb;
+  border-left: 5px solid #f59e0b;
+  padding: 15px;
+  margin-top: 15px;
+  margin-bottom: 15px;
+  border-radius: 0 4px 4px 0;
+}
+.page-break {
+  page-break-before: always;
+  clear: both;
+}
+</style>
+</head>
+<body>
+
+<div style="text-align: center; margin-top: 50px; margin-bottom: 100px;">
+  <h1 style="border-bottom: none; font-size: 32pt; color: #1e3a8a; margin-bottom: 10px;">SYSTEM & USER MANUAL</h1>
+  <h2 style="border-bottom: none; font-size: 20pt; color: #475569; margin-top: 0;">Radiance Dermatology & Aesthetic Clinic</h2>
+  <p style="font-size: 14pt; color: #64748b; margin-top: 50px;"><strong>Clinic Management System (DCMS)</strong></p>
+  <p style="font-size: 12pt; color: #64748b;">Version 1.0.5 &bull; Release Date: July 2026</p>
+</div>
+
+<div class="page-break"></div>
+
+<h1>1. System Overview & Architecture</h1>
+<p>The Radiance Dermatology & Aesthetic Clinic Management System (DCMS) is a multi-user desktop and web application designed to run inside a local area network (LAN). It facilitates complete automation of the clinical workflow, starting from patient registration, vital checks, booking fees, clinical consultations, laboratory order locks, pharmacy stock management, and unified invoicing.</p>
+
+<h3>Technology Stack</h3>
+<ul>
+  <li><strong>Frontend:</strong> Single Page Application built with HTML5, Vanilla CSS, and Vite JavaScript (compiled to optimized assets).</li>
+  <li><strong>Desktop Client:</strong> Electron desktop shell wrapper (facilitates native Windows print communication).</li>
+  <li><strong>Backend Server:</strong> Node.js with Express framework, providing RESTful API endpoints.</li>
+  <li><strong>Database Layer:</strong> Cloud-based Google Firebase Firestore database (enabling instant cross-device data synchronization).</li>
+  <li><strong>Email Engine:</strong> NodeMailer configured to Zoho Mail SMTP server.</li>
+  <li><strong>Print Engine:</strong> Background iframe rendering for flawless print dialogues and PDF exports.</li>
+</ul>
+
+<div class="highlight-box">
+  <strong>Note on Cloud Sync:</strong> Although the backend server runs on your local host PC inside the clinic, all clinic data is synced in real-time to Google Firebase Firestore in the cloud. This ensures zero data loss if a local hard drive fails.
+</div>
+
+<div class="page-break"></div>
+
+<h1>2. Database Schema (Firestore Collections)</h1>
+<p>The application relies on 11 collections inside Firebase Firestore. They are structured as follows:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Collection Name</th>
+      <th>Key Document Fields</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>appointments</strong></td>
+      <td>id, patient_id, date, time, purpose, fee, status, created_at</td>
+      <td>Stores registrations, scheduling, booking fee records, and status (e.g., Awaiting Lab, Completed).</td>
+    </tr>
+    <tr>
+      <td><strong>billing</strong></td>
+      <td>id, consultation_id, patient_id, items_json, total_amount, status, created_at</td>
+      <td>Stores invoices. Items contain JSON arrays of consultation, lab, and treatment fees.</td>
+    </tr>
+    <tr>
+      <td><strong>consultations</strong></td>
+      <td>id, appointment_id, doctor_id, patient_id, age_group, gender, primary_complaint, working_diagnosis, created_at</td>
+      <td>Stores final completed consultation records.</td>
+    </tr>
+    <tr>
+      <td><strong>draft_consultations</strong></td>
+      <td>appointment_id, patient_id, doctor_id, doctor_notes, primary_complaint, working_diagnosis, updated_at</td>
+      <td>Stores temporary notes when a doctor orders lab tests and waits for results. Document ID matches the appointment ID.</td>
+    </tr>
+    <tr>
+      <td><strong>lab_orders</strong></td>
+      <td>id, appointment_id, patient_id, doctor_id, test_name, price, status, result, created_at</td>
+      <td>Tracks laboratory tests, scientific findings, and status (Pending / Completed).</td>
+    </tr>
+    <tr>
+      <td><strong>ordered_treatments</strong></td>
+      <td>id, consultation_id, patient_id, doctor_id, treatment_name, price, status, created_at</td>
+      <td>Tracks treatments to be performed by the nursing staff.</td>
+    </tr>
+    <tr>
+      <td><strong>patients</strong></td>
+      <td>id, name, age, phone, email, address, created_at</td>
+      <td>Global registry of clinic patients.</td>
+    </tr>
+    <tr>
+      <td><strong>pharmacy_inventory</strong></td>
+      <td>id, drug_name, price, stock, description, created_at</td>
+      <td>Tracks drug names, unit prices, and live stock levels.</td>
+    </tr>
+    <tr>
+      <td><strong>prescriptions</strong></td>
+      <td>id, consultation_id, patient_id, doctor_id, drug_name, frequency, route, duration, instructions, price, status, is_paid, created_at</td>
+      <td>Tracks medications prescribed to patients. Status matches "Pending" or "Dispensed".</td>
+    </tr>
+    <tr>
+      <td><strong>settings</strong></td>
+      <td>id (e.g. clinic_name, clinic_logo), value</td>
+      <td>Stores custom configurations like name, address, logo (Base64), and default booking fees.</td>
+    </tr>
+    <tr>
+      <td><strong>users</strong></td>
+      <td>id, username, password (hashed), name, role (Admin, Doctor, Lab, Pharmacy, Reception), created_at</td>
+      <td>Clinic staff accounts.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<h1>3. System Installation & Configuration</h1>
+
+<h2>Step 1: Environment Settings (.env)</h2>
+<p>Create a file named <code>.env</code> inside the <code>backend/</code> folder with the following configuration:</p>
+<div class="code-block">
+PORT=3000
+SMTP_HOST=smtp.zoho.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=YOUR_ZOHO_EMAIL@yourdomain.com
+SMTP_PASS=YOUR_ZOHO_APP_PASSWORD
+SMTP_FROM_NAME="Radiance Derms"
+SMTP_FROM_EMAIL=YOUR_ZOHO_EMAIL@yourdomain.com
+</div>
+
+<h2>Step 2: Database Connection File</h2>
+<p>Place your Firebase service account credentials JSON file inside the <code>backend/</code> folder, named exactly:</p>
+<div class="code-block">
+backend/firebase-service-account.json
+</div>
+
+<h2>Step 3: Compilation and Packing (Asar Build)</h2>
+<p>To compile the frontend assets and package the entire app into a Windows installer, run the following commands in the project root directory:</p>
+<div class="code-block">
+# 1. Compile frontend files
+cd frontend
+npm run build
+cd ..
+
+# 2. Package everything into Electron win-unpacked resources
+npm run package
+</div>
+<p>This will generate the installer executable: <code>dist_electron/Radiance Derms Setup 1.0.4.exe</code>.</p>
+
+<div class="alert-box">
+  <strong>Production Setup Note:</strong> Once the installer is built, copy it to the host computer via a USB flash drive, run the installer, and the app will set up the local server and standalone application interface automatically.
+</div>
+
+<div class="page-break"></div>
+
+<h1>4. Local Network (LAN) Setup Guide</h1>
+<p>To allow all laptops, computers, iPads, and mobile phones in the clinic to use the application simultaneously, follow these network configuration steps:</p>
+
+<h2>1. Identify the Host Server IP Address</h2>
+<p>Go to the main computer running the backend server:</p>
+<ul>
+  <li>Press the <strong>Windows Key</strong>, type <code>cmd</code>, and press Enter to open the Command Prompt.</li>
+  <li>Type <code>ipconfig</code> and press Enter.</li>
+  <li>Locate your network adapter (Ethernet or Wi-Fi) and copy the **IPv4 Address** (e.g., <code>192.168.1.150</code>).</li>
+</ul>
+
+<h2>2. Connect Client Devices</h2>
+<ul>
+  <li>Ensure all other clinic devices (laptops, iPads, tablets) are connected to the **same Wi-Fi router / local network** as the host PC.</li>
+  <li>Open the Google Chrome (or Safari) web browser on any client device.</li>
+  <li>In the address bar, type the server address:
+    <div class="code-block" style="display:inline-block; padding: 4px 10px;">http://192.168.1.150:3000</div> (replace with your actual server IP).
+  </li>
+  <li>Press Enter. The login dashboard will load immediately. Any changes made on the tablet will instantly reflect on all other screens!</li>
+</ul>
+
+<div class="highlight-box">
+  <strong>Dynamic API Feature:</strong> The app automatically detects when it is opened in a web browser on another local device and routes its requests directly to the main server IP instead of localhost.
+</div>
+
+<div class="page-break"></div>
+
+<h1>5. Role-Based User Manual</h1>
+
+<h2>1. Receptionist Panel</h2>
+<ul>
+  <li><strong>Patient Registration:</strong> Click the "Add New Patient" button, fill in their name, age, phone, address, and email. Ensure you input the correct email so they can receive receipts and prescriptions.</li>
+  <li><strong>Approve & Reschedule:</strong> Review appointment requests, reschedule them if the doctor is busy, and click "Approve" once the patient is confirmed.</li>
+  <li><strong>Print Booking Receipt:</strong> Click "Print Receipt" upon booking confirmation. The printer dialogue will open, allowing you to print the booking slip.</li>
+</ul>
+
+<h2>2. Doctor Panel (Consultations & Lab Locks)</h2>
+<ul>
+  <li><strong>Start Consultation:</strong> Select a patient with status `'Approved'` or `'Lab Results Received'` from the queue.</li>
+  <li><strong>Ordering Lab Tests (Lock Workflow):</strong> 
+    <ul>
+      <li>Check the boxes for any lab tests to be performed (e.g., Skin Scraping, Wood's Light).</li>
+      <li>Checking a test will immediately **disable the Medications and Treatments sections** and hide the final consultation completion buttons.</li>
+      <li>Click **"Send to Lab & Await Results"**. This saves a draft of your notes, bills the patient for the lab tests, sets the appointment status to `'Awaiting Lab Results'`, and logs you back to the queue.</li>
+    </ul>
+  </li>
+  <li><strong>Resume Consultation:</strong> Once the lab logs the results, click the green **"Resume Consultation"** button. The completed results will load at the top in a green box, and the Medication and final submission buttons will be fully unlocked.</li>
+  <li><strong>Completing Consultation:</strong> Input medication prescriptions (dose, frequency, duration), write doctor notes, and click **"Save Consultation"** or **"Email Patient"** to dispatch the prescription to their email immediately.</li>
+</ul>
+
+<h2>3. Laboratory Panel</h2>
+<ul>
+  <li><strong>Queue:</strong> View all patients currently scheduled for tests.</li>
+  <li><strong>Enter Results:</strong> Click "Enter Results" next to a patient. Set the test status to **"Completed / Performed"** and type your findings inside the text box.</li>
+  <li><strong>Send to Doctor:</strong> Click "Save Records & Send to Billing". Once all tests for that patient's appointment are completed, the system automatically notifies the doctor by changing the patient status to "Lab Results Received" in the doctor's queue.</li>
+</ul>
+
+<h2>4. Pharmacy Panel</h2>
+<ul>
+  <li><strong>Dispense Queue:</strong> Review pending prescriptions.</li>
+  <li><strong>Mark Dispensed & Emailed PDF:</strong> Select the items being purchased, and click "Dispense & Mark Paid".
+    <ul>
+      <li>If the patient has an email on file, the system compiles the pharmacy invoice and **emails it directly as a PDF attachment** without opening the local print window.</li>
+      <li>If no email is recorded, it falls back to local print preview automatically.</li>
+    </ul>
+  </li>
+  <li><strong>Live Stock Levels:</strong> View inventory levels. If stock drops below 10, the quantity is highlighted in Red.</li>
+</ul>
+
+<h2>5. Administrator Dashboard</h2>
+<ul>
+  <li><strong>Analytics Charts:</strong> View real-time graphs showing monthly revenue trends, patient onboarding rates, and top 5 medical diagnoses.</li>
+  <li><strong>Export Reports:</strong> Click **"Export CSV"** to download clinical analytics to Excel, or click **"Save PDF"** to print clean, structured full-page visual reports.</li>
+</ul>
+
+</body>
+</html>
