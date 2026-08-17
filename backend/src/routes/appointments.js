@@ -149,6 +149,12 @@ router.patch('/:id/status', async (req, res) => {
     if (new_time) updateData.time = new_time;
     
     await appRef.update(updateData);
+    
+    // Log Audit
+    const { logAudit } = require('../audit_logger');
+    const uName = req.user ? req.user.name : 'Receptionist';
+    const uId = req.user ? req.user.id : 'Unknown';
+    await logAudit(uId, uName, 'Update Appointment', `Changed status of ${req.params.id} to ${status}`);
 
     // Respond immediately to UI
     res.json({ success: true });
@@ -213,6 +219,47 @@ router.patch('/:id/status', async (req, res) => {
     })();
   } catch (err) {
     console.error("Status update error", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/remind', async (req, res) => {
+  try {
+    const docRef = db.collection('appointments').doc(req.params.id);
+    const doc = await docRef.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Not found' });
+    
+    const appData = doc.data();
+    const patientDoc = await db.collection('patients').doc(appData.patient_id).get();
+    if (!patientDoc.exists) return res.status(404).json({ error: 'Patient not found' });
+    
+    const pData = patientDoc.data();
+    if (!pData.email) return res.status(400).json({ error: 'Patient has no email address' });
+
+    const snap = await db.collection('settings').get();
+    let reminderTpl = 'Hello {{name}}, A reminder for your appointment on {{date}} at {{time}}.';
+    snap.docs.forEach(d => {
+      if(d.id === 'email_reminder') reminderTpl = d.data().value;
+    });
+    
+    // Replace placeholders
+    let msgBody = reminderTpl
+      .replace(/{{name}}/g, pData.name)
+      .replace(/{{date}}/g, appData.date)
+      .replace(/{{time}}/g, appData.time);
+
+    const html = `
+      <div style="font-family:sans-serif;">
+        ${msgBody.split('\\n').map(p => `<p>${p}</p>`).join('')}
+        <br><br>
+        <p>Best Regards,</p>
+        <p>The Clinic Team</p>
+      </div>
+    `;
+
+    await sendEmail(pData.email, `Appointment Reminder - ${appData.date}`, html);
+    res.json({ success: true, message: 'Reminder email sent successfully!' });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

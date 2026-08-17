@@ -14,8 +14,13 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, phone, email, gender, dob, address } = req.body;
-  if (!name) return res.status(400).json({ error: 'Name is required' });
+  let { name, phone, email, gender, dob, address } = req.body;
+  if (!name || name.trim() === '') return res.status(400).json({ error: 'Name is required' });
+  name = name.trim();
+  
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
 
   try {
     const patientsRef = db.collection('patients');

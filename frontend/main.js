@@ -1,15 +1,59 @@
 const API_URL = 'http://localhost:3000/api';
 
-window.filterTable = function(tbodyId, term) {
+window.filterTable = function(tbodyId, query) {
+  query = query.toLowerCase();
   const tbody = document.getElementById(tbodyId);
-  if (!tbody) return;
+  if(!tbody) return;
   const rows = tbody.getElementsByTagName('tr');
-  const lowerTerm = term.toLowerCase();
-  for (let i = 0; i < rows.length; i++) {
-    const text = rows[i].textContent.toLowerCase();
-    rows[i].style.display = text.includes(lowerTerm) ? '' : 'none';
+  for(let row of rows) {
+    if(row.innerText.toLowerCase().includes(query)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
   }
-};
+}
+
+window.exportTableToCSV = function(tbodyId, filename) {
+  const tbody = document.getElementById(tbodyId);
+  if(!tbody) return;
+  let csv = [];
+  
+  // Get headers from previous sibling thead if exists
+  const thead = tbody.previousElementSibling;
+  if(thead && thead.tagName === 'THEAD') {
+    const headers = [];
+    const ths = thead.querySelectorAll('th');
+    for(let th of ths) {
+      if(th.innerText !== 'Actions') headers.push('"' + th.innerText.replace(/"/g, '""') + '"');
+    }
+    csv.push(headers.join(','));
+  }
+
+  const rows = tbody.querySelectorAll('tr');
+  for (let i = 0; i < rows.length; i++) {
+    // skip hidden rows from search filter
+    if(rows[i].style.display === 'none') continue; 
+    let row = [], cols = rows[i].querySelectorAll('td, th');
+    for (let j = 0; j < cols.length; j++) {
+      // Exclude the last column if it is typically Actions
+      if(j === cols.length - 1 && thead && thead.querySelectorAll('th')[j]?.innerText === 'Actions') continue;
+      // Exclude buttons or inputs text by grabbing innerText directly
+      let data = cols[j].innerText.replace(/"/g, '""');
+      row.push('"' + data + '"');
+    }
+    csv.push(row.join(','));
+  }
+
+  const csvFile = new Blob([csv.join('\n')], {type: 'text/csv'});
+  const downloadLink = document.createElement('a');
+  downloadLink.download = filename;
+  downloadLink.href = window.URL.createObjectURL(csvFile);
+  downloadLink.style.display = 'none';
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+}
 
 let currentUser = null;
 let allUsers = [];
@@ -358,6 +402,12 @@ function renderAdminReports(container) {
             <canvas id="donutChart"></canvas>
           </div>
         </div>
+        <div class="card" style="padding:2rem;">
+          <h3 style="color:#1e293b; font-size:1.1rem; margin-bottom:1.5rem; font-weight:600;">Patient Demographics (Gender)</h3>
+          <div style="position: relative; height:350px; width:100%;">
+            <canvas id="demoChart"></canvas>
+          </div>
+        </div>
       </div>
     `;
   
@@ -395,6 +445,20 @@ function renderAdminReports(container) {
             }]
           },
           options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, cutout: '70%' }
+        });
+
+        if (window.adminDemoChart) window.adminDemoChart.destroy();
+        window.adminDemoChart = new Chart(document.getElementById('demoChart'), {
+          type: 'pie',
+          data: {
+            labels: data.demoData ? data.demoData.labels : ['Male', 'Female'],
+            datasets: [{
+              data: data.demoData ? data.demoData.data : [50, 50],
+              backgroundColor: ['#3b82f6', '#f43f5e', '#cbd5e1'],
+              borderWidth: 0
+            }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
         });
       }
     });
@@ -524,6 +588,15 @@ function renderAdminSettings(container) {
           <div class="form-group span2" style="grid-column: span 2;">
             <label style="color:#475569; font-weight:500;">Clinic Policy & Conduct</label>
             <textarea id="admClinicPolicy" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%; height:100px; resize:vertical;">${sysSettings.clinic_policy || 'Please arrive 10 minutes early. Cancellations require 24h notice.'}</textarea>
+          </div>
+          
+          <div class="form-group span2" style="grid-column: span 2; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
+            <label style="color:#475569; font-weight:500;"><i class="fas fa-envelope"></i> Email Template: Booking Approved (Use {{name}}, {{date}}, {{time}})</label>
+            <textarea id="admEmailApproved" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%; height:100px; resize:vertical;">${sysSettings.email_approved || 'Hello {{name}}, Your appointment for {{date}} at {{time}} is approved.'}</textarea>
+          </div>
+          <div class="form-group span2" style="grid-column: span 2;">
+            <label style="color:#475569; font-weight:500;"><i class="fas fa-envelope"></i> Email Template: Appointment Reminder (Use {{name}}, {{date}}, {{time}})</label>
+            <textarea id="admEmailReminder" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%; height:100px; resize:vertical;">${sysSettings.email_reminder || 'Hello {{name}}, A reminder for your appointment on {{date}} at {{time}}.'}</textarea>
           </div>
         </div>
       </div>
@@ -739,6 +812,7 @@ function renderReception(page) {
                       <button class="btn btn-sm" style="background:#f59e0b;" onclick="updateAppointmentStatus('${a.id}', 'Cancelled')">Cancel</button>
                     ` : ''}
                     <button class="btn btn-sm" style="background:#3b82f6;" onclick="openRescheduleModal('${a.id}', '${a.date}', '${a.time}')">Reschedule</button>
+                    ${a.status === 'Approved' ? `<button class="btn btn-sm btn-outline" style="border: 1px solid #3b82f6; color: #3b82f6;" onclick="sendReminder('${a.id}')">Reminder</button>` : ''}
                   </div>
                 </td>
               </tr>`).join('')}
@@ -781,6 +855,21 @@ window.verifyPayment = async function(appId) {
 window.setReceptionTab = function(tab) {
   window.receptionTab = tab;
   renderReception(document.getElementById('mainContent'));
+};
+
+window.sendReminder = async function(appId) {
+  if(!confirm('Send a reminder email to this patient?')) return;
+  try {
+    toast("Sending reminder...");
+    const res = await fetch(`${API_URL}/appointments/${appId}/remind`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+    });
+    if(!res.ok) throw new Error((await res.json()).error);
+    toast("Reminder email sent successfully!");
+  } catch(err) {
+    toast(err.message || 'Failed to send reminder');
+  }
 };
 
 window.openBookAppointmentModal = function() {
@@ -1064,6 +1153,73 @@ window.emailPrescription = async function(consId) {
       toast("Failed to email prescription: " + err.message);
     }
 }
+
+window.printConsultation = async function(consId) {
+  try {
+    toast("Generating Consultation PDF...");
+    const allCons = await apiFetch('/consultations');
+    const myCons = allCons.find(c => c.id == consId);
+    
+    if (!myCons) {
+      toast("Consultation not found.");
+      return;
+    }
+    
+    const cName = sysSettings.clinic_name || 'Radiance Dermatology Clinic';
+    const logo = sysSettings.clinic_logo ? `<img src="${sysSettings.clinic_logo}" style="max-width:200px; max-height:60px; object-fit:contain; margin-bottom:1rem;">` : '';
+
+    const win = window.open('', '_blank');
+    win.document.write(`
+      <html><head><title>Consultation Record</title>
+      <style>body{font-family:sans-serif; padding:2rem; max-width:800px; margin:auto; line-height:1.6;} .section{margin-bottom:1.5rem; padding-bottom:1rem; border-bottom:1px solid #ccc;}</style>
+      </head><body>
+        <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:1rem; margin-bottom:2rem;">
+          ${logo}
+          <h2>${cName.toUpperCase()} - CONSULTATION RECORD</h2>
+        </div>
+        
+        <div style="display:flex; justify-content:space-between; margin-bottom:2rem; border:1px solid #000; padding:1rem; background:#f9fafb;">
+          <div>
+            <p style="margin:0 0 0.5rem 0;"><strong>Patient:</strong> ${myCons.patient_name}</p>
+            <p style="margin:0;"><strong>Date:</strong> ${new Date(myCons.created_at).toLocaleDateString()}</p>
+          </div>
+          <div style="text-align:right;">
+            <p style="margin:0 0 0.5rem 0;"><strong>Doctor:</strong> Dr. ${myCons.doctor_name}</p>
+            <p style="margin:0;"><strong>Cons ID:</strong> #${consId}</p>
+          </div>
+        </div>
+        
+        <div class="section">
+          <h3>History & Complaint</h3>
+          <p><strong>Primary Complaint:</strong> ${myCons.history_primary || 'N/A'}</p>
+          <p><strong>Detailed History:</strong> ${myCons.history_details || 'N/A'}</p>
+        </div>
+        
+        <div class="section">
+          <h3>Examination & Findings</h3>
+          <p><strong>Clinical Notes:</strong> ${myCons.exam_notes || 'N/A'}</p>
+        </div>
+        
+        <div class="section">
+          <h3>Diagnosis & Plan</h3>
+          <p><strong>Working Diagnosis:</strong> ${myCons.working_diagnosis || 'N/A'}</p>
+          <p><strong>Differentials:</strong> ${myCons.differentials || 'N/A'}</p>
+          <p><strong>Treatment Plan:</strong> ${myCons.treatment_plan || 'N/A'}</p>
+        </div>
+        
+        <div style="margin-top:4rem; text-align:right;">
+          <p>______________________________________</p>
+          <p>Dr. ${myCons.doctor_name} Signature</p>
+        </div>
+      </body></html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
+  } catch (err) {
+    toast(err.message);
+  }
+};
 
 window.printPrescription = async function(consId) {
   try {
@@ -1617,6 +1773,7 @@ function renderDocHistory(container) {
         <td>
           <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
             <button class="btn btn-sm btn-secondary" onclick="viewHistory('${c.patient_id}')">View History</button>
+            <button class="btn btn-sm btn-secondary" style="background:#0ea5e9; color:white; border:none;" onclick="printConsultation('${c.id}')">Print PDF</button>
             <button class="btn btn-sm btn-secondary" onclick="printPrescription('${c.id}')">Print Rx</button>
           </div>
         </td>
@@ -2775,7 +2932,10 @@ function renderBilling(page) {
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
         <h3 style="margin:0;">Invoices & Billing Queue</h3>
-        <input type="text" placeholder="Search bills..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="filterTable('billTb', this.value)">
+        <div style="display:flex; gap:1rem;">
+          <input type="text" placeholder="Search bills..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="filterTable('billTb', this.value)">
+          <button class="btn btn-outline" onclick="exportTableToCSV('billTb', 'billing_records.csv')">Export CSV</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table>
@@ -2961,8 +3121,10 @@ function renderAdminData(container) {
           <option value="prescriptions">Prescriptions</option>
           <option value="nursing_logs">Nursing Logs</option>
           <option value="billing">Billing/Invoices</option>
+          <option value="audit_logs">Audit Logs (System Activity)</option>
         </select>
         <button class="btn btn-primary" onclick="loadAdminDataTable()">Load Data</button>
+        <button class="btn btn-outline" onclick="exportTableToCSV('sysDataBody', 'system_data.csv')">Export CSV</button>
         <input type="text" placeholder="Search records..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px; margin-left:auto;" oninput="filterTable('sysDataBody', this.value)">
       </div>
 
@@ -3177,7 +3339,9 @@ window.updateSysSettings = async function(btn) {
     { key: 'working_hours_end', value: document.getElementById('admEndTime').value },
     { key: 'closed_days', value: document.getElementById('admClosedDays').value },
     { key: 'slot_duration', value: document.getElementById('admSlotDuration').value },
-    { key: 'clinic_policy', value: document.getElementById('admClinicPolicy').value }
+    { key: 'clinic_policy', value: document.getElementById('admClinicPolicy').value },
+    { key: 'email_approved', value: document.getElementById('admEmailApproved').value },
+    { key: 'email_reminder', value: document.getElementById('admEmailReminder').value }
   ];
   
   try {

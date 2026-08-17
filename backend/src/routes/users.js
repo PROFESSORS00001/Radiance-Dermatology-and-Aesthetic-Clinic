@@ -32,6 +32,9 @@ router.post('/', async (req, res) => {
   if (!name || !username || !password || !role) {
     return res.status(400).json({ error: 'Name, email, password and role are required' });
   }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+  }
 
   try {
     const usersRef = db.collection('users');

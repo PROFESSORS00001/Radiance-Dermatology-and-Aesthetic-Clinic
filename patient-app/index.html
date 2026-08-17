@@ -233,10 +233,15 @@
     // Call immediately on load
     fetchSettings();
 
+    // Prevent past dates from being selected
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('date').setAttribute('min', today);
+
     document.getElementById('date').addEventListener('change', async (e) => {
       const dateVal = e.target.value;
       const timeSelect = document.getElementById('time');
       timeSelect.innerHTML = '<option value="">Loading slots...</option>';
+      timeSelect.value = ""; // Clear previously selected time
       
       try {
         const res = await fetch(`${API_BASE}/public/booking/availability?date=${dateVal}`);

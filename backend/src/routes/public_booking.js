@@ -96,6 +96,14 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Name, phone, date, time, and payment consent are required' });
   }
 
+  // Prevent booking in the past
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Start of today
+  const requestDate = new Date(date);
+  if (requestDate < today) {
+    return res.status(400).json({ error: 'Appointments cannot be booked in the past.' });
+  }
+
   try {
     let patientId = null;
     const patientsRef = db.collection('patients');

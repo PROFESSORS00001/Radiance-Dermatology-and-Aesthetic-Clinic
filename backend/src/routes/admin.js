@@ -90,6 +90,10 @@ router.get('/reports', async (req, res) => {
       const revenueTrend = [0, 0, 0, 0, 0, 0];
       const patientTrend = [0, 0, 0, 0, 0, 0];
       
+      let maleCount = 0;
+      let femaleCount = 0;
+      let otherCount = 0;
+      
       const now = new Date();
       for (let i = 5; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -112,6 +116,11 @@ router.get('/reports', async (req, res) => {
       
       patSnap.forEach(d => {
         const data = d.data();
+        
+        if (data.gender === 'Male') maleCount++;
+        else if (data.gender === 'Female') femaleCount++;
+        else otherCount++;
+        
         if (!data.created_at) return;
         const date = new Date(data.created_at);
         if (date >= sixMonthsAgo) {
@@ -160,6 +169,10 @@ router.get('/reports', async (req, res) => {
         diagnosisData: {
           labels: diagLabels,
           data: diagData
+        },
+        demoData: {
+          labels: ['Male', 'Female', 'Other'],
+          data: [maleCount, femaleCount, otherCount]
         }
       });
     } catch (err) {

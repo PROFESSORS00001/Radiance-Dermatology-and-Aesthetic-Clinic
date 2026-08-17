@@ -24,6 +24,7 @@ app.use('/api/nursing', requireAuth, require('./routes/nursing'));
 app.use('/api/pharmacy', requireAuth, require('./routes/pharmacy'));
 app.use('/api/billing', requireAuth, require('./routes/billing'));
 app.use('/api/settings', requireAuth, require('./routes/settings'));
+app.use('/api/audit', requireAuth, require('./routes/audit'));
 app.use('/api/admin', requireAuth, require('./routes/admin'));
 app.use('/api/email', require('./routes/email'));
 app.use('/api/public/booking', require('./routes/public_booking'));
