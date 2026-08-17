@@ -20,15 +20,15 @@ router.post('/', async (req, res) => {
   try {
     const patientsRef = db.collection('patients');
     
-    // Check duplication by phone or email
-    if (phone) {
-      const phoneCheck = await patientsRef.where('phone', '==', phone).get();
-      if (!phoneCheck.empty) return res.status(400).json({ error: 'A patient with this phone number already exists.' });
-    }
-    
-    if (email) {
-      const emailCheck = await patientsRef.where('email', '==', email).get();
-      if (!emailCheck.empty) return res.status(400).json({ error: 'A patient with this email already exists.' });
+    // Check duplication by name and gender
+    if (name) {
+      const nameCheck = await patientsRef.where('name', '==', name).get();
+      if (!nameCheck.empty) {
+        const duplicate = nameCheck.docs.find(d => d.data().gender === gender);
+        if (duplicate) {
+          return res.status(400).json({ error: 'A patient with this exact name and gender already exists in the system.' });
+        }
+      }
     }
 
     const counterRef = db.collection('counters').doc('patients');
