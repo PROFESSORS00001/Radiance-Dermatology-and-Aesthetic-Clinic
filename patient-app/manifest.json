@@ -3,13 +3,13 @@
   "short_name": "Radiance Derms",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#fffbeb",
-  "theme_color": "#f97316",
+  "background_color": "#f0fdfa",
+  "theme_color": "#0f766e",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/3004/3004613.png",
+      "src": "./icon.jpg",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/jpeg"
     }
   ]
 }
