@@ -257,12 +257,25 @@
       const s1 = document.getElementById('step1');
       const inputs = s1.querySelectorAll('input[required], select[required]');
       let valid = true;
-      inputs.forEach(i => { if(!i.value) valid = false; });
+      let checkValid = true;
+      
+      inputs.forEach(i => { 
+        if(i.type === 'checkbox') {
+          if(!i.checked) checkValid = false;
+        } else {
+          if(!i.value) valid = false; 
+        }
+      });
       
       if(!valid) {
         alert('Please fill out all required fields.');
         return;
       }
+      if(!checkValid) {
+        alert('You must accept the Clinic Policy before continuing.');
+        return;
+      }
+      
       s1.classList.add('hidden');
       document.getElementById('step2').classList.remove('hidden');
     }
