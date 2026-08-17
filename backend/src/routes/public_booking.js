@@ -102,11 +102,15 @@ router.post('/', async (req, res) => {
     
     const phoneCheck = await patientsRef.where('phone', '==', phone).get();
     if (!phoneCheck.empty) {
-      patientId = phoneCheck.docs[0].id;
-    } else if (email) {
+      const matched = phoneCheck.docs.find(d => d.data().name.toLowerCase() === name.toLowerCase());
+      if (matched) patientId = matched.id;
+    }
+    
+    if (!patientId && email) {
       const emailCheck = await patientsRef.where('email', '==', email).get();
       if (!emailCheck.empty) {
-        patientId = emailCheck.docs[0].id;
+        const matched = emailCheck.docs.find(d => d.data().name.toLowerCase() === name.toLowerCase());
+        if (matched) patientId = matched.id;
       }
     }
 
