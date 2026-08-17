@@ -170,21 +170,24 @@
           <button type="button" class="btn" onclick="nextStep()">Continue to Payment</button>
         </div>
 
-        <!-- Step 2: Payment -->
+        <!-- Step 2: Payment Consent -->
         <div id="step2" class="hidden">
-          <div class="orange-money-box">
-            <div class="om-logo">Orange Money</div>
-            <p style="font-size: 0.9rem; color: #64748b;">Pay to Agent Code:</p>
-            <div class="om-code" id="displayOmCode">Loading...</div>
-            <p style="font-size: 0.85rem; color: #64748b; margin-top:0.5rem;">Dial #144# and transfer the <strong id="displayOmFee" style="color:var(--primary);">booking fee</strong>. Enter your Transaction ID below.</p>
+          <div class="form-group" style="background:#f1f5f9; padding:1.5rem; border-radius:8px; border-left:4px solid var(--primary);">
+            <h4 style="margin-top:0; margin-bottom:0.5rem; color:#0f172a;">Booking Fee Required Upon Arrival</h4>
+            <p style="font-size: 0.95rem; color: #475569; margin:0;">
+              A booking fee of <strong id="displayOmFee" style="color:var(--primary);">NLE 300</strong> is required to secure this consultation. 
+              You will be required to pay this amount directly to the receptionist upon your arrival at the clinic.
+            </p>
           </div>
 
-          <div class="form-group">
-            <label>Transaction ID / Reference</label>
-            <input type="text" id="transaction_id" required placeholder="e.g. PP123456789">
+          <div class="form-group" style="margin-top: 1.5rem;">
+            <label style="display:flex; align-items:flex-start; gap:0.75rem; cursor:pointer; font-weight:normal;">
+              <input type="checkbox" id="payment_consent" required style="width:20px; height:20px; margin-top:2px; flex-shrink:0;">
+              <span style="font-size:0.9rem; color:#334155;">I agree to pay the booking fee of NLE 300 to the receptionist upon my arrival at Radiance Dermatology & Aesthetic Clinic. I understand my consultation may be delayed if payment is not made.</span>
+            </label>
           </div>
           
-          <button type="submit" class="btn" id="submitBtn">Complete Booking</button>
+          <button type="submit" class="btn" id="submitBtn">Confirm & Book Appointment</button>
           <button type="button" class="btn" style="background:transparent; color:#64748b; margin-top:1rem;" onclick="prevStep()">Back</button>
         </div>
       </form>
@@ -193,8 +196,8 @@
     <!-- Success State -->
     <div id="successState" class="card hidden">
       <div class="check-icon">✓</div>
-      <h2 style="margin-bottom:1rem;">Booking Received!</h2>
-      <p style="color:#64748b; line-height:1.6;">Your appointment request and payment details have been sent. You will receive an email confirmation shortly once your payment is verified.</p>
+      <h2 style="margin-bottom:1rem;">Booking Confirmed!</h2>
+      <p style="color:#64748b; line-height:1.6;">Your appointment request has been received. You will receive an email confirmation shortly. Please remember to pay the NLE 300 booking fee upon arrival.</p>
       <button class="btn" style="margin-top:2rem;" onclick="location.reload()">Book Another</button>
     </div>
   </main>
@@ -299,7 +302,7 @@
         date: document.getElementById('date').value,
         time: document.getElementById('time').value,
         purpose: document.getElementById('purpose').value,
-        transaction_id: document.getElementById('transaction_id').value
+        payment_consent: document.getElementById('payment_consent').checked
       };
 
       try {
