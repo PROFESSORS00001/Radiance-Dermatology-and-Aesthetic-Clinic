@@ -4,7 +4,7 @@ const db = require('../firebase');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-async function sendReceipt(email, name, date, time, purpose, transaction_id) {
+async function sendReceipt(email, name, date, time, purpose) {
   if (!email) return;
   try {
     const snap = await db.collection('settings').get();
@@ -31,8 +31,8 @@ async function sendReceipt(email, name, date, time, purpose, transaction_id) {
       <h3>Hello ${name},</h3>
       <p>Thank you for choosing ${emailSettings.clinic_name || 'Radiance Dermatology Clinic'}.</p>
       <p>Your appointment request for <b>${purpose}</b> on <b>${date} at ${time}</b> has been received.</p>
-      <p>Orange Money Transaction ID: <b>${transaction_id}</b></p>
-      <p>Your booking is currently <b>Pending Verification</b>. You will receive another email once your payment is confirmed and the appointment is officially scheduled.</p>
+      <p style="color:#f97316; font-weight:bold;">Please note: A booking fee of NLE 300 is required upon arrival to secure your consultation.</p>
+      <p>Your booking is currently <b>Pending Approval</b>. You will receive an email once the clinic approves your appointment.</p>
       <br>
       <p>Best Regards,</p>
       <p>The Clinic Team</p>
@@ -91,9 +91,9 @@ router.get('/availability', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, phone, email, date, time, purpose, transaction_id } = req.body;
-  if (!name || !phone || !date || !time || !transaction_id) {
-    return res.status(400).json({ error: 'Name, phone, date, time, and transaction ID are required' });
+  const { name, phone, email, date, time, purpose, payment_consent } = req.body;
+  if (!name || !phone || !date || !time || !payment_consent) {
+    return res.status(400).json({ error: 'Name, phone, date, time, and payment consent are required' });
   }
 
   try {
@@ -125,7 +125,7 @@ router.post('/', async (req, res) => {
     const existingAppts = await db.collection('appointments').where('patient_id', '==', patientId).get();
     const hasPending = existingAppts.docs.some(d => {
       const data = d.data();
-      return data.status === 'Pending' || data.payment_status === 'Pending Verification';
+      return data.status === 'Pending';
     });
     
     if (hasPending) {
@@ -139,14 +139,13 @@ router.post('/', async (req, res) => {
       time,
       purpose: purpose || 'Consultation',
       status: 'Pending',
-      payment_status: 'Pending Verification',
-      orange_money_transaction_id: transaction_id,
+      payment_status: 'Unpaid',
       created_at: new Date().toISOString()
     };
     
     await db.collection('appointments').add(newApp);
     
-    sendReceipt(email, name, date, time, purpose || 'Consultation', transaction_id);
+    sendReceipt(email, name, date, time, purpose || 'Consultation');
 
     res.status(201).json({ success: true, message: 'Booking received successfully' });
   } catch (err) {

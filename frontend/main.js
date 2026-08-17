@@ -1,5 +1,16 @@
 const API_URL = 'http://localhost:3000/api';
 
+window.filterTable = function(tbodyId, term) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  const rows = tbody.getElementsByTagName('tr');
+  const lowerTerm = term.toLowerCase();
+  for (let i = 0; i < rows.length; i++) {
+    const text = rows[i].textContent.toLowerCase();
+    rows[i].style.display = text.includes(lowerTerm) ? '' : 'none';
+  }
+};
+
 let currentUser = null;
 let allUsers = [];
 let allPatients = [];
@@ -392,9 +403,12 @@ function renderAdminReports(container) {
 
 function renderAdminUsers(container) {
   container.innerHTML = `
-    <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center;">
+    <div class="card" style="margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
       <h3 style="margin:0; color:#1e293b;">System Users & Access Control</h3>
-      <button class="btn btn-primary" onclick="addUser()">+ Add New User</button>
+      <div style="display:flex; gap:1rem; align-items:center;">
+        <input type="text" placeholder="Search users..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="filterTable('admUserTb', this.value)">
+        <button class="btn btn-primary" onclick="addUser()">+ Add New User</button>
+      </div>
     </div>
     <div class="card">
       <div class="table-wrap">
@@ -671,7 +685,12 @@ window.delUser = async function(id) {
 window.receptionTab = window.receptionTab || 'appointments';
 
 function renderReception(page) {
-  const apps = allAppointments.filter(a => a.status !== 'Completed' && a.status !== 'Cancelled');
+  const searchTerm = (document.getElementById('receptionSearch') || {value: ''}).value.toLowerCase();
+  const apps = allAppointments.filter(a => 
+    a.status !== 'Completed' && 
+    a.status !== 'Cancelled' &&
+    (a.patient_name?.toLowerCase().includes(searchTerm) || a.purpose?.toLowerCase().includes(searchTerm) || a.status?.toLowerCase().includes(searchTerm))
+  );
   const fee = sysSettings.consultation_fee || 150000;
   
   page.innerHTML = `
@@ -692,7 +711,10 @@ function renderReception(page) {
   } else {
     container.innerHTML = `
       <div class="card">
-        <h3>Upcoming Appointments</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3>Upcoming Appointments</h3>
+          <input type="text" id="receptionSearch" placeholder="Search appointments..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="renderReception(document.getElementById('mainContent'))" value="${searchTerm}">
+        </div>
         <div class="table-wrap" style="margin-top:1rem;">
           <table>
             <thead><tr><th>Date & Time</th><th>Patient</th><th>Doctor</th><th>Purpose</th><th>Status</th><th>Actions</th></tr></thead>
@@ -704,18 +726,19 @@ function renderReception(page) {
                 <td>${a.purpose}</td>
                 <td>
                   <span class="status-badge" style="background:${a.status==='Approved'?'#d1fae5':a.status==='Rescheduled'?'#e0e7ff':'#fef3c7'}; color:${a.status==='Approved'?'#065f46':a.status==='Rescheduled'?'#3730a3':'#92400e'};">${a.status}</span>
-                  ${a.payment_status === 'Pending Verification' ? `<br><span style="display:inline-block; margin-top:4px; padding:2px 6px; background:#ffedd5; color:#ea580c; border-radius:4px; font-size:0.75rem; font-weight:bold;">OM Verification Needed</span>` : ''}
+                  ${a.payment_status === 'Unpaid' ? `<br><span style="display:inline-block; margin-top:4px; padding:2px 6px; background:#fee2e2; color:#b91c1c; border-radius:4px; font-size:0.75rem; font-weight:bold;">NLE 300 Due</span>` : ''}
                 </td>
                 <td>
-                  <div style="display:flex; flex-direction:column; gap:0.5rem;">
-                    ${a.payment_status === 'Pending Verification' 
-                      ? `<div style="background:#f8fafc; border:1px dashed #cbd5e1; padding:6px; border-radius:6px; font-size:0.8rem;">
-                           <strong style="color:var(--primary);">OM ID: ${a.orange_money_transaction_id}</strong><br>
-                           <small>Fee: Le 300</small>
-                         </div>
-                         <button class="btn btn-sm" style="background:#10b981; width:100%;" onclick="verifyPayment('${a.id}')">Verify OM Payment</button>`
-                      : `<button class="btn btn-sm btn-secondary" onclick="printBookingReceipt('${a.patient_id}', '${a.date}', ${fee})">Print Receipt</button>`
-                    }
+                  <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+                    ${a.status === 'Pending' ? `
+                      <button class="btn btn-sm" style="background:#10b981;" onclick="updateAppointmentStatus('${a.id}', 'Approved')">Approve</button>
+                      <button class="btn btn-sm" style="background:#ef4444;" onclick="updateAppointmentStatus('${a.id}', 'Rejected')">Reject</button>
+                    ` : ''}
+                    ${a.status === 'Approved' || a.status === 'Rescheduled' ? `
+                      <button class="btn btn-sm btn-secondary" onclick="printBookingReceipt('${a.patient_id}', '${a.date}', ${fee})">Receipt</button>
+                      <button class="btn btn-sm" style="background:#f59e0b;" onclick="updateAppointmentStatus('${a.id}', 'Cancelled')">Cancel</button>
+                    ` : ''}
+                    <button class="btn btn-sm" style="background:#3b82f6;" onclick="openRescheduleModal('${a.id}', '${a.date}', '${a.time}')">Reschedule</button>
                   </div>
                 </td>
               </tr>`).join('')}
@@ -1529,7 +1552,10 @@ window.setDocTab = function(tab) {
 function renderDocQueue(container) {
   container.innerHTML = `
     <div class="card">
-      <h3>Pending Consultations</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Pending Consultations</h3>
+        <input type="text" placeholder="Search patients..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="filterTable('docAppTb', this.value)">
+      </div>
       <div class="table-wrap" style="margin-top:1rem;">
         <table>
           <thead><tr><th>Time</th><th>Patient</th><th>Purpose</th><th>Status</th><th>Actions</th></tr></thead>
@@ -2325,7 +2351,10 @@ function renderLab(page) {
     </div>
     
     <div class="card" style="margin-bottom:1.5rem;">
-      <h3 style="padding:1.5rem 1.5rem 0 1.5rem; margin:0; color:#1e293b; font-size:1.1rem;">Pending Lab Orders Queue</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:1.5rem 1.5rem 0 1.5rem;">
+        <h3 style="margin:0; color:#1e293b; font-size:1.1rem;">Pending Lab Orders Queue</h3>
+        <input type="text" placeholder="Search orders..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="filterTable('labTb', this.value)">
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Patient Name</th><th>Doctor</th><th>Test Name</th><th>Actions</th></tr></thead>
@@ -2438,7 +2467,10 @@ function renderPharmacy(page) {
     
     <div style="display:grid; grid-template-columns: 2fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
       <div class="card" style="margin-bottom:0;">
-        <h3 style="padding:1.5rem 1.5rem 0 1.5rem; margin:0; color:#1e293b; font-size:1.1rem;">Pending Dispense Queue</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:1.5rem 1.5rem 0 1.5rem;">
+          <h3 style="margin:0; color:#1e293b; font-size:1.1rem;">Pending Dispense Queue</h3>
+          <input type="text" placeholder="Search pharmacy..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:200px;" oninput="filterTable('pharmTb', this.value)">
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Patient ID</th><th>Patient Name</th><th>Pending Items</th><th>Actions</th></tr></thead>
@@ -2704,7 +2736,10 @@ function renderNurse(page) {
   page.innerHTML = `
     <div class="page-header"><div><div class="page-title">Nursing Dashboard</div></div></div>
     <div class="card">
-      <h3>Pending Clinical Treatments</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3>Pending Clinical Treatments</h3>
+        <input type="text" placeholder="Search orders..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="filterTable('nurseTxTb', this.value)">
+      </div>
       <div class="table-wrap" style="margin-top:1rem;">
         <table>
           <thead><tr><th>Patient</th><th>Doctor</th><th>Treatment</th><th>Status</th><th>Actions</th></tr></thead>
@@ -2738,6 +2773,10 @@ function renderBilling(page) {
       <div><div class="page-title">Billing & Final Checkout</div></div>
     </div>
     <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <h3 style="margin:0;">Invoices & Billing Queue</h3>
+        <input type="text" placeholder="Search bills..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="filterTable('billTb', this.value)">
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>ID</th><th>Date</th><th>Patient</th><th>Amount (Le)</th><th>Status</th><th>Actions</th></tr></thead>
@@ -2912,7 +2951,7 @@ function renderAdminData(container) {
       <h3 style="margin-bottom:1.5rem; color:#1e293b; font-size:1.1rem; font-weight:600;">System Data Explorer</h3>
       <p style="color:#64748b; margin-bottom:1rem; font-size:0.9rem;">Select a table to view, edit, or delete records. Warning: modifying data here directly affects system integrity.</p>
       
-      <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1.5rem;">
+      <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap;">
         <select id="sysDataTableSelect" class="form-group" style="margin:0; padding:0.5rem; width:250px; border:1px solid #cbd5e1; border-radius:8px;">
           <option value="patients">Patients</option>
           <option value="appointments">Appointments</option>
@@ -2924,6 +2963,7 @@ function renderAdminData(container) {
           <option value="billing">Billing/Invoices</option>
         </select>
         <button class="btn btn-primary" onclick="loadAdminDataTable()">Load Data</button>
+        <input type="text" placeholder="Search records..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px; margin-left:auto;" oninput="filterTable('sysDataBody', this.value)">
       </div>
 
       <div class="table-wrap" style="max-height:600px; overflow-y:auto; overflow-x:auto;">
@@ -3208,19 +3248,60 @@ window.submitAddUser = async function() {
   }
 };
 
-window.approveApp = async function(btn, id) {
-  btn.disabled = true;
+window.updateAppointmentStatus = async function(id, status) {
+  if (status === 'Cancelled' || status === 'Rejected') {
+    if (!confirm(`Are you sure you want to mark this appointment as ${status}?`)) return;
+  }
+  toast(`Marking as ${status}...`);
   try {
     await apiFetch(`/appointments/${id}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'Approved' })
+      body: JSON.stringify({ status })
     });
     allAppointments = await apiFetch('/appointments');
     renderReception(document.getElementById('mainContent'));
-    toast('Appointment Approved');
+    toast(`Appointment ${status}`);
   } catch(err) {
     toast(err.message);
-    btn.disabled = false;
+  }
+};
+
+window.openRescheduleModal = function(id, currentDate, currentTime) {
+  showModal(`
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header"><h3>Reschedule Appointment</h3><button class="close-btn" onclick="closeModal()">&times;</button></div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>New Date</label>
+          <input type="date" id="reschDate" value="${currentDate}" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid #cbd5e1;">
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+          <label>New Time</label>
+          <input type="time" id="reschTime" value="${currentTime}" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid #cbd5e1;">
+        </div>
+        <button class="btn btn-primary btn-block" style="margin-top:1.5rem;" onclick="submitReschedule('${id}')">Confirm Reschedule</button>
+      </div>
+    </div>
+  `);
+};
+
+window.submitReschedule = async function(id) {
+  const newDate = document.getElementById('reschDate').value;
+  const newTime = document.getElementById('reschTime').value;
+  if (!newDate || !newTime) return toast('Please select date and time');
+  
+  toast('Rescheduling...');
+  try {
+    await apiFetch(`/appointments/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'Rescheduled', new_date: newDate, new_time: newTime })
+    });
+    allAppointments = await apiFetch('/appointments');
+    closeModal();
+    renderReception(document.getElementById('mainContent'));
+    toast('Appointment Rescheduled Successfully');
+  } catch(err) {
+    toast(err.message);
   }
 };
 
