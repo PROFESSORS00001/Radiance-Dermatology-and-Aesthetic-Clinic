@@ -26,16 +26,18 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, username, email, password, role } = req.body;
+  const { name, email, password, role } = req.body;
+  const username = req.body.username || email; // Fallback to email if username is empty
+  
   if (!name || !username || !password || !role) {
-    return res.status(400).json({ error: 'Name, username, password and role are required' });
+    return res.status(400).json({ error: 'Name, email, password and role are required' });
   }
 
   try {
     const usersRef = db.collection('users');
     const existing = await usersRef.where('username', '==', username).get();
     if (!existing.empty) {
-      return res.status(400).json({ error: 'Username already exists' });
+      return res.status(400).json({ error: 'A user with this email/username already exists' });
     }
 
     const hash = await bcrypt.hash(password, 10);
