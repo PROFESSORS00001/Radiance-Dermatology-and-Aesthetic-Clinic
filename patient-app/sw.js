@@ -1,4 +1,4 @@
-const CACHE_NAME = 'radiance-derms-v2';
+const CACHE_NAME = 'radiance-derms-v3';
 const urlsToCache = [
   './index.html',
   './manifest.json'
