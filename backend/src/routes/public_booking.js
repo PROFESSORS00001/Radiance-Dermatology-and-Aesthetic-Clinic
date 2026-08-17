@@ -100,18 +100,9 @@ router.post('/', async (req, res) => {
     let patientId = null;
     const patientsRef = db.collection('patients');
     
-    const phoneCheck = await patientsRef.where('phone', '==', phone).get();
-    if (!phoneCheck.empty) {
-      const matched = phoneCheck.docs.find(d => d.data().name.toLowerCase() === name.toLowerCase());
-      if (matched) patientId = matched.id;
-    }
-    
-    if (!patientId && email) {
-      const emailCheck = await patientsRef.where('email', '==', email).get();
-      if (!emailCheck.empty) {
-        const matched = emailCheck.docs.find(d => d.data().name.toLowerCase() === name.toLowerCase());
-        if (matched) patientId = matched.id;
-      }
+    const nameCheck = await patientsRef.where('name', '==', name).get();
+    if (!nameCheck.empty) {
+      patientId = nameCheck.docs[0].id;
     }
 
     if (!patientId) {
