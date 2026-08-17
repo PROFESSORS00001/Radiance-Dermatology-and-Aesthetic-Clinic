@@ -49,6 +49,47 @@ async function sendReceipt(email, name, date, time, purpose, transaction_id) {
   }
 }
 
+router.get('/availability', async (req, res) => {
+  const date = req.query.date;
+  if (!date) return res.status(400).json({ error: 'Date is required' });
+  try {
+    const snap = await db.collection('settings').get();
+    let settings = {};
+    snap.docs.forEach(d => { settings[d.id] = d.data().value; });
+
+    const start = settings.working_hours_start || '09:00';
+    const end = settings.working_hours_end || '17:00';
+    const duration = parseInt(settings.slot_duration) || 30;
+    const closedDaysStr = settings.closed_days || 'Sunday';
+    const closedDays = closedDaysStr.split(',').map(d => d.trim().toLowerCase());
+
+    const dateObj = new Date(date);
+    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+
+    if (closedDays.includes(dayName)) {
+      return res.json({ available_slots: [] });
+    }
+
+    const appts = await db.collection('appointments').where('date', '==', date).get();
+    const bookedTimes = appts.docs.map(d => d.data().time);
+
+    let slots = [];
+    let current = new Date(`1970-01-01T${start}:00`);
+    const endTime = new Date(`1970-01-01T${end}:00`);
+
+    while (current < endTime) {
+      let timeStr = current.toTimeString().substring(0, 5);
+      if (!bookedTimes.includes(timeStr)) {
+        slots.push(timeStr);
+      }
+      current.setMinutes(current.getMinutes() + duration);
+    }
+    res.json({ available_slots: slots });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/', async (req, res) => {
   const { name, phone, email, date, time, purpose, transaction_id } = req.body;
   if (!name || !phone || !date || !time || !transaction_id) {

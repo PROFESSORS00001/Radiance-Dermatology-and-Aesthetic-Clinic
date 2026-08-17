@@ -8,8 +8,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #f97316; /* Orange Money color */
-      --primary-dark: #ea580c;
+      --primary: #0f766e;
+      --primary-dark: #115e59;
+      --orange: #f97316;
       --bg: #f8fafc;
       --text: #1e293b;
       --surface: rgba(255, 255, 255, 0.85);
@@ -17,7 +18,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Inter', sans-serif;
-      background: linear-gradient(135deg, #fffbeb 0%, #ffedd5 100%);
+      background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
       color: var(--text);
       min-height: 100vh;
       display: flex;
@@ -86,9 +87,14 @@
       text-align: center;
       margin-bottom: 1.5rem;
     }
-    .om-logo { color: #f97316; font-weight: bold; font-size: 1.2rem; margin-bottom: 0.5rem; }
+    .om-logo { color: var(--orange); font-weight: bold; font-size: 1.2rem; margin-bottom: 0.5rem; }
     .om-code { font-size: 1.8rem; letter-spacing: 2px; font-weight: 800; color: #1e293b; margin: 0.5rem 0; }
     .hidden { display: none; }
+    
+    /* Policy Modal */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
+    .modal-content { background: white; padding: 2rem; border-radius: 12px; max-width: 400px; width: 90%; }
+    .modal-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary); }
     
     #successState { text-align: center; padding: 2rem 1rem; }
     .check-icon {
@@ -100,9 +106,22 @@
 </head>
 <body>
 
-  <header>
-    <h1>Radiance Derms</h1>
+  <header style="display:flex; align-items:center; justify-content:space-between; padding:1rem 1.5rem;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <img id="clinicLogo" src="" style="height:40px; display:none; border-radius:8px;">
+      <h1 id="clinicName">Radiance Derms</h1>
+    </div>
+    <button onclick="document.getElementById('policyModal').classList.remove('hidden')" style="background:transparent; border:1px solid var(--primary); color:var(--primary); padding:0.5rem 1rem; border-radius:8px; cursor:pointer; font-weight:600;">About Clinic</button>
   </header>
+
+  <!-- Policy Modal -->
+  <div id="policyModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-title">Clinic Policy & Conduct</div>
+      <p id="policyText" style="line-height:1.6; color:#475569; margin-bottom:1.5rem; white-space:pre-wrap;">Loading...</p>
+      <button class="btn" onclick="document.getElementById('policyModal').classList.add('hidden')">Close</button>
+    </div>
+  </div>
 
   <main>
     <div id="bookingWizard" class="card">
@@ -129,7 +148,9 @@
           </div>
           <div class="form-group">
             <label>Preferred Time</label>
-            <input type="time" id="time" required>
+            <select id="time" required>
+              <option value="">Select a date first...</option>
+            </select>
           </div>
           <div class="form-group">
             <label>Reason for Visit</label>
@@ -182,6 +203,14 @@
         const res = await fetch(`${API_BASE}/public/branding`);
         const data = await res.json();
         
+        if(data.clinic_name) document.getElementById('clinicName').textContent = data.clinic_name;
+        if(data.clinic_logo) {
+          const img = document.getElementById('clinicLogo');
+          img.src = data.clinic_logo;
+          img.style.display = 'block';
+        }
+        if(data.clinic_policy) document.getElementById('policyText').textContent = data.clinic_policy;
+        
         document.getElementById('displayOmCode').textContent = data.om_agent_code || '123456';
         document.getElementById('displayOmFee').textContent = data.consultation_fee ? `Le ${data.consultation_fee} fee` : 'Le 300 fee';
         
@@ -193,6 +222,30 @@
     
     // Call immediately on load
     fetchSettings();
+
+    document.getElementById('date').addEventListener('change', async (e) => {
+      const dateVal = e.target.value;
+      const timeSelect = document.getElementById('time');
+      timeSelect.innerHTML = '<option value="">Loading slots...</option>';
+      
+      try {
+        const res = await fetch(`${API_BASE}/public/booking/availability?date=${dateVal}`);
+        const data = await res.json();
+        timeSelect.innerHTML = '<option value="">Select a time...</option>';
+        if(data.available_slots && data.available_slots.length > 0) {
+          data.available_slots.forEach(slot => {
+            const opt = document.createElement('option');
+            opt.value = slot;
+            opt.textContent = slot;
+            timeSelect.appendChild(opt);
+          });
+        } else {
+          timeSelect.innerHTML = '<option value="">No slots available this day</option>';
+        }
+      } catch(err) {
+        timeSelect.innerHTML = '<option value="">Error loading slots</option>';
+      }
+    });
 
     function nextStep() {
       const s1 = document.getElementById('step1');

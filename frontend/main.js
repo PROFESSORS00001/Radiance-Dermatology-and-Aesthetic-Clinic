@@ -491,6 +491,26 @@ function renderAdminSettings(container) {
             <label style="color:#475569; font-weight:500;">Clinic Address</label>
             <input type="text" id="admClinicAddress" value="${sysSettings.clinic_address || '123 Health Ave, Freetown'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
           </div>
+          <div class="form-group">
+            <label style="color:#475569; font-weight:500;">Start Time</label>
+            <input type="time" id="admStartTime" value="${sysSettings.working_hours_start || '09:00'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
+          </div>
+          <div class="form-group">
+            <label style="color:#475569; font-weight:500;">End Time</label>
+            <input type="time" id="admEndTime" value="${sysSettings.working_hours_end || '17:00'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
+          </div>
+          <div class="form-group">
+            <label style="color:#475569; font-weight:500;">Closed Days (comma separated)</label>
+            <input type="text" id="admClosedDays" value="${sysSettings.closed_days || 'Sunday'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;" placeholder="e.g. Saturday, Sunday">
+          </div>
+          <div class="form-group">
+            <label style="color:#475569; font-weight:500;">Slot Duration (minutes)</label>
+            <input type="number" id="admSlotDuration" value="${sysSettings.slot_duration || 30}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
+          </div>
+          <div class="form-group span2" style="grid-column: span 2;">
+            <label style="color:#475569; font-weight:500;">Clinic Policy & Conduct</label>
+            <textarea id="admClinicPolicy" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%; height:100px; resize:vertical;">${sysSettings.clinic_policy || 'Please arrive 10 minutes early. Cancellations require 24h notice.'}</textarea>
+          </div>
         </div>
       </div>
       
@@ -3112,7 +3132,12 @@ window.updateSysSettings = async function(btn) {
     { key: 'clinic_address', value: document.getElementById('admClinicAddress').value },
     { key: 'clinic_logo', value: window.tempBase64Logo || '' },
     { key: 'consultation_fee', value: document.getElementById('admConsFee').value },
-    { key: 'om_agent_code', value: document.getElementById('admOmAgent').value }
+    { key: 'om_agent_code', value: document.getElementById('admOmAgent').value },
+    { key: 'working_hours_start', value: document.getElementById('admStartTime').value },
+    { key: 'working_hours_end', value: document.getElementById('admEndTime').value },
+    { key: 'closed_days', value: document.getElementById('admClosedDays').value },
+    { key: 'slot_duration', value: document.getElementById('admSlotDuration').value },
+    { key: 'clinic_policy', value: document.getElementById('admClinicPolicy').value }
   ];
   
   try {
