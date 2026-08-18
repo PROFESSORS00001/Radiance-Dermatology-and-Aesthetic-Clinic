@@ -32,7 +32,6 @@ body {
 }
 .auth-card {
   background: var(--card-bg);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--card-border);
   box-shadow: var(--glass-shadow);
   padding: 3rem 2.5rem;
@@ -91,9 +90,13 @@ body {
 
 /* Premium Sidebar */
 .sidebar {
-  width: 280px;
-  background: #0f172a;
-  color: #94a3b8;
+  width: var(--sidebar-width);
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  height: 100vh;
+  position: fixed;
+  left: 0; top: 0;
+  transition: transform 0.3s ease;
   display: flex;
   flex-direction: column;
   box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
@@ -251,7 +254,6 @@ body {
 /* Cards & Tables */
 .card {
   background: var(--card-bg);
-  backdrop-filter: blur(16px);
   border: 1px solid var(--card-border);
   box-shadow: var(--glass-shadow);
   border-radius: 12px;
@@ -277,8 +279,7 @@ tr:hover td { background: rgba(255,255,255,0.5); }
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(17, 24, 39, 0.4);
-  backdrop-filter: blur(4px);
+  background: rgba(17, 24, 39, 0.6);
   display: flex;
   justify-content: center;
   align-items: center;

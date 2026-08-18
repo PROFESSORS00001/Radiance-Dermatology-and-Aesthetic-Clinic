@@ -184,6 +184,11 @@ function renderLogin() {
   });
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const origText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
+    btn.disabled = true;
+
     try {
       const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
@@ -198,6 +203,9 @@ function renderLogin() {
       initApp();
     } catch(err) {
       toast(err.message);
+    } finally {
+      btn.innerHTML = origText;
+      btn.disabled = false;
     }
   });
 }
