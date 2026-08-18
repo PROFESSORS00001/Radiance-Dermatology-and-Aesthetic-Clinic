@@ -1,17 +1,27 @@
 const API_URL = 'http://localhost:3000/api';
 
+window.searchTimeout = null;
 window.filterTable = function(tbodyId, query) {
-  query = query.toLowerCase();
-  const tbody = document.getElementById(tbodyId);
-  if(!tbody) return;
-  const rows = tbody.getElementsByTagName('tr');
-  for(let row of rows) {
-    if(row.innerText.toLowerCase().includes(query)) {
-      row.style.display = '';
-    } else {
-      row.style.display = 'none';
+  if (window.searchTimeout) clearTimeout(window.searchTimeout);
+  window.searchTimeout = setTimeout(() => {
+    query = query.toLowerCase();
+    const tbody = document.getElementById(tbodyId);
+    if(!tbody) return;
+    const rows = tbody.getElementsByTagName('tr');
+    for(let row of rows) {
+      // Use textContent instead of innerText to avoid massive layout reflows!
+      if(row.textContent.toLowerCase().includes(query)) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
     }
-  }
+  }, 150); // 150ms debounce
+}
+
+window.formatID = function(id, prefix) {
+  if (!id) return '';
+  return `${prefix}-${id.toString().substring(0, 4).toUpperCase()}`;
 }
 
 window.exportTableToCSV = function(tbodyId, filename) {
@@ -758,11 +768,12 @@ window.delUser = async function(id) {
 window.receptionTab = window.receptionTab || 'appointments';
 
 function renderReception(page) {
-  const searchTerm = (document.getElementById('receptionSearch') || {value: ''}).value.toLowerCase();
+  const today = new Date().toISOString().split('T')[0];
   const apps = allAppointments.filter(a => 
     a.status !== 'Completed' && 
     a.status !== 'Cancelled' &&
-    (a.patient_name?.toLowerCase().includes(searchTerm) || a.purpose?.toLowerCase().includes(searchTerm) || a.status?.toLowerCase().includes(searchTerm))
+    a.status !== 'Rejected' &&
+    a.date >= today
   );
   const fee = sysSettings.consultation_fee || 150000;
   
@@ -786,12 +797,12 @@ function renderReception(page) {
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <h3>Upcoming Appointments</h3>
-          <input type="text" id="receptionSearch" placeholder="Search appointments..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="renderReception(document.getElementById('mainContent'))" value="${searchTerm}">
+          <input type="text" id="receptionSearch" placeholder="Search appointments..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="filterTable('upcomingAppsBody', this.value)">
         </div>
         <div class="table-wrap" style="margin-top:1rem;">
           <table>
             <thead><tr><th>Date & Time</th><th>Patient</th><th>Doctor</th><th>Purpose</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody>
+            <tbody id="upcomingAppsBody">
               ${apps.map(a => `<tr>
                 <td>${a.date} <br><small style="color:#64748b;">${a.time}</small></td>
                 <td><strong>${a.patient_name}</strong></td>
@@ -1122,7 +1133,7 @@ window.emailPrescription = async function(consId) {
             </div>
             <div style="text-align:right;">
               <p style="margin:0 0 0.5rem 0;"><strong>Prescriber:</strong> Dr. ${dName}</p>
-              <p style="margin:0;"><strong>Cons. ID:</strong> #${consId}</p>
+              <p style="margin:0;"><strong>Cons. ID:</strong> ${formatID(consId, 'CONS')}</p>
             </div>
           </div>
           
@@ -1270,7 +1281,7 @@ window.printPrescription = async function(consId) {
           </div>
           <div style="text-align:right;">
             <p style="margin:0 0 0.5rem 0;"><strong>Prescriber:</strong> Dr. ${dName}</p>
-            <p style="margin:0;"><strong>Cons. ID:</strong> #${consId}</p>
+            <p style="margin:0;"><strong>Cons. ID:</strong> ${formatID(consId, 'CONS')}</p>
           </div>
         </div>
         
@@ -1644,7 +1655,7 @@ window.openAddPatientModal = function() {
             <div class="form-group"><label>Phone</label><input id="apPhone"></div>
             <div class="form-group"><label>Email</label><input type="email" id="apEmail"></div>
             <div class="form-group"><label>Gender</label><select id="apGender"><option>Male</option><option>Female</option></select></div>
-            <div class="form-group"><label>Date of Birth</label><input type="date" id="apDob"></div>
+            <div class="form-group"><label>Age</label><input type="number" id="apAge" placeholder="e.g. 35" min="0" max="120"></div>
           </div>
           <div class="form-group"><label>Residential Address</label><textarea id="apAddr"></textarea></div>
           <button type="submit" class="btn btn-block">Save Patient</button>
@@ -1661,7 +1672,8 @@ window.openAddPatientModal = function() {
           phone: document.getElementById('apPhone').value,
           email: document.getElementById('apEmail').value,
           gender: document.getElementById('apGender').value,
-          dob: document.getElementById('apDob').value,
+          dob: null, // Removed per request
+          age: document.getElementById('apAge').value,
           address: document.getElementById('apAddr').value
         })
       });
@@ -2838,7 +2850,7 @@ window.buildFinalReceiptHTML = function(id) {
       </div>
       <p style="margin-top:2rem;"><strong>Patient Name:</strong> ${b.patient_name}</p>
       <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-      <p><strong>Receipt #:</strong> ${b.id}</p>
+      <p><strong>Receipt #:</strong> ${formatID(b.id, 'RCPT')}</p>
       <table>
         <thead><tr><th>Description</th><th>Amount</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -3079,7 +3091,7 @@ window.printFinalReceipt = function(id) {
         <h3>OFFICIAL RECEIPT</h3>
       </div>
       <div class="meta">
-        <div><strong>Patient:</strong> ${b.patient_name}<br><strong>Receipt #:</strong> RCPT-${b.id}</div>
+        <div><strong>Patient:</strong> ${b.patient_name}<br><strong>Receipt #:</strong> ${formatID(b.id, 'RCPT')}</div>
         <div><strong>Date:</strong> ${new Date(b.created_at).toLocaleDateString()}<br><strong>Status:</strong> ${b.status}</div>
       </div>
       <table>
@@ -3732,7 +3744,13 @@ window.exportReportsCSV = function() {
     toast('No data to export', 'error');
     return;
   }
-  const { revLabels, revData, patientLabels, patientData, topDiag, diagCounts } = window.reportDataCache;
+  const { chartData, diagnosisData } = window.reportDataCache;
+  const revLabels = chartData.labels;
+  const revData = chartData.revenue;
+  const patientLabels = chartData.labels;
+  const patientData = chartData.patients;
+  const topDiag = diagnosisData.labels;
+  const diagCounts = diagnosisData.data;
   
   let csv = 'Report Generated: ' + new Date().toLocaleString() + '\n\n';
   

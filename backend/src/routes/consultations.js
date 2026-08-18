@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../firebase');
 const { resolvePatientAndDoctorNames } = require('../resolver');
+const { sendEmail } = require('../email_service');
 
 router.get('/', async (req, res) => {
   try {
@@ -144,6 +145,28 @@ router.post('/', async (req, res) => {
       try {
         await db.collection('draft_consultations').doc(String(payload.appointment_id)).delete();
       } catch (err) {}
+    }
+    
+    // Send email to patient
+    try {
+      const patDoc = await db.collection('patients').doc(String(payload.patient_id)).get();
+      if (patDoc.exists) {
+        const pat = patDoc.data();
+        if (pat.email) {
+          const emailHtml = `
+            <h2>Consultation Completed</h2>
+            <p>Dear ${pat.full_name},</p>
+            <p>Your consultation with the doctor has been completed. Your medical records, prescriptions, and invoice have been updated in your file.</p>
+            <p>If you have any pending payments or prescriptions to collect, please visit the Reception/Pharmacy.</p>
+            <br>
+            <p>Thank you,</p>
+            <p><strong>Radiance Dermatology Clinic</strong></p>
+          `;
+          await sendEmail(pat.email, 'Consultation Completed - Radiance Clinic', emailHtml);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to send consultation complete email:", e);
     }
 
     res.status(201).json({ id: consultation_id, success: true });

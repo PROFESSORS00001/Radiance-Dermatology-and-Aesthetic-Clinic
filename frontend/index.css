@@ -959,3 +959,22 @@ input:focus, select:focus, textarea:focus {
     min-width: 100%;
   }
 }
+
+/* Performance Optimizations */
+.table-wrap tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: 50px;
+}
+.modal, .card, .btn {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+.main-content {
+  will-change: scroll-position;
+}
+
+@media print {
+  .sidebar, button, input { display: none !important; }
+  .main-content { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+  body { background: white !important; }
+}

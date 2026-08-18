@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  let { name, phone, email, gender, dob, address } = req.body;
+  let { name, phone, email, gender, dob, age, address } = req.body;
   if (!name || name.trim() === '') return res.status(400).json({ error: 'Name is required' });
   name = name.trim();
   
@@ -51,7 +51,7 @@ router.post('/', async (req, res) => {
     });
 
     const newPatient = {
-      name, phone, email, gender, dob, address,
+      name, phone, email, gender, dob, age, address,
       patient_id: newId,
       created_at: new Date().toISOString()
     };
