@@ -24,45 +24,60 @@ window.formatID = function(id, prefix) {
   return `${prefix}-${id.toString().substring(0, 4).toUpperCase()}`;
 }
 
-window.exportTableToCSV = function(tbodyId, filename) {
+window.exportTableToCSV = function(tbodyId, filename, btn) {
   const tbody = document.getElementById(tbodyId);
   if(!tbody) return;
-  let csv = [];
   
-  // Get headers from previous sibling thead if exists
-  const thead = tbody.previousElementSibling;
-  if(thead && thead.tagName === 'THEAD') {
-    const headers = [];
-    const ths = thead.querySelectorAll('th');
-    for(let th of ths) {
-      if(th.innerText !== 'Actions') headers.push('"' + th.innerText.replace(/"/g, '""') + '"');
-    }
-    csv.push(headers.join(','));
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) { 
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting...'; 
+    btn.disabled = true; 
   }
 
-  const rows = tbody.querySelectorAll('tr');
-  for (let i = 0; i < rows.length; i++) {
-    // skip hidden rows from search filter
-    if(rows[i].style.display === 'none') continue; 
-    let row = [], cols = rows[i].querySelectorAll('td, th');
-    for (let j = 0; j < cols.length; j++) {
-      // Exclude the last column if it is typically Actions
-      if(j === cols.length - 1 && thead && thead.querySelectorAll('th')[j]?.innerText === 'Actions') continue;
-      // Exclude buttons or inputs text by grabbing innerText directly
-      let data = cols[j].innerText.replace(/"/g, '""');
-      row.push('"' + data + '"');
+  // Use timeout to allow the browser to render the loading state
+  setTimeout(() => {
+    let csv = [];
+    
+    // Get headers from previous sibling thead if exists
+    const thead = tbody.previousElementSibling;
+    if(thead && thead.tagName === 'THEAD') {
+      const headers = [];
+      const ths = thead.querySelectorAll('th');
+      for(let th of ths) {
+        if(th.innerText !== 'Actions') headers.push('"' + th.innerText.replace(/"/g, '""') + '"');
+      }
+      csv.push(headers.join(','));
     }
-    csv.push(row.join(','));
-  }
 
-  const csvFile = new Blob([csv.join('\n')], {type: 'text/csv'});
-  const downloadLink = document.createElement('a');
-  downloadLink.download = filename;
-  downloadLink.href = window.URL.createObjectURL(csvFile);
-  downloadLink.style.display = 'none';
-  document.body.appendChild(downloadLink);
-  downloadLink.click();
-  document.body.removeChild(downloadLink);
+    const rows = tbody.querySelectorAll('tr');
+    for (let i = 0; i < rows.length; i++) {
+      // skip hidden rows from search filter
+      if(rows[i].style.display === 'none') continue; 
+      let row = [], cols = rows[i].querySelectorAll('td, th');
+      for (let j = 0; j < cols.length; j++) {
+        // Exclude the last column if it is typically Actions
+        if(j === cols.length - 1 && thead && thead.querySelectorAll('th')[j]?.innerText === 'Actions') continue;
+        // Exclude buttons or inputs text by grabbing innerText directly
+        let data = cols[j].innerText.replace(/"/g, '""');
+        row.push('"' + data + '"');
+      }
+      csv.push(row.join(','));
+    }
+
+    const csvFile = new Blob([csv.join('\n')], {type: 'text/csv'});
+    const downloadLink = document.createElement('a');
+    downloadLink.download = filename;
+    downloadLink.href = window.URL.createObjectURL(csvFile);
+    downloadLink.style.display = 'none';
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    
+    if (btn) { 
+      btn.innerHTML = origText; 
+      btn.disabled = false; 
+    }
+  }, 100);
 }
 
 let currentUser = null;
@@ -350,7 +365,7 @@ function renderAdminReports(container) {
           <div style="color:#64748b; font-size:0.9rem; margin-top:0.25rem;">Real-time analytics and revenue tracking</div>
         </div>
         <div style="display:flex; gap:10px;" class="no-print">
-          <button class="btn btn-secondary" onclick="exportReportsCSV()" style="display:flex; align-items:center; gap:8px;"><i class="fas fa-file-csv"></i> Export CSV</button>
+          <button class="btn btn-secondary" onclick="exportReportsCSV(this)" style="display:flex; align-items:center; gap:8px;"><i class="fas fa-file-csv"></i> Export CSV</button>
           <button class="btn btn-primary" onclick="window.print()" style="display:flex; align-items:center; gap:8px;"><i class="fas fa-print"></i> Save PDF</button>
         </div>
       </div>
@@ -741,7 +756,7 @@ window.addCatalogItem = async function(table) {
 }
 
 window.updateCatalogItem = async function(btn, table, id) {
-  const orig = btn.innerText; btn.innerText = '...'; btn.disabled = true;
+  const orig = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...'; btn.disabled = true;
   const price = document.getElementById(`cat_${table}_${id}`).value;
   const stockEl = document.getElementById(`stock_${table}_${id}`);
   const stock = stockEl ? stockEl.value : null;
@@ -750,7 +765,7 @@ window.updateCatalogItem = async function(btn, table, id) {
     await apiFetch(`/admin/catalog/${table}/${id}`, { method:'PATCH', body:JSON.stringify({price, stock}) });
     toast("Item updated!");
   } catch(e) { toast(e.message); }
-  btn.innerText = orig; btn.disabled = false;
+  btn.innerHTML = orig; btn.disabled = false;
 }
 
 window.deleteCatalogItem = async function(table, id) {
@@ -2408,7 +2423,7 @@ window.loadInlineHistory = async function(patId) {
 };
 
 window.submitFullConsultation = async function(btn, action) {
-  const orig = btn.innerText; btn.innerText = 'Saving...'; btn.disabled = true;
+  const orig = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; btn.disabled = true;
 
   const checked = (name) => {
     const el = document.querySelector(`input[name="${name}"]:checked`);
@@ -2531,7 +2546,7 @@ window.submitFullConsultation = async function(btn, action) {
     setDocTab('queue');
   } catch(err) { toast(err.message); }
   
-  btn.innerText = orig; btn.disabled = false;
+  btn.innerHTML = orig; btn.disabled = false;
 }
 
 
@@ -2700,7 +2715,7 @@ window.openLabPatient = function(pid) {
 
 window.submitLabBatch = async function(btn, pid) {
   const pTests = window.labPendingData.filter(x => x.patient_id === pid);
-  const orig = btn.innerText; btn.innerText = 'Processing...'; btn.disabled = true;
+  const orig = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...'; btn.disabled = true;
   
   try {
     for(let t of pTests) {
@@ -2716,7 +2731,7 @@ window.submitLabBatch = async function(btn, pid) {
   } catch (e) {
     toast(e.message);
   }
-  btn.innerText = orig; btn.disabled = false;
+  btn.innerHTML = orig; btn.disabled = false;
 }
 
 window.pharmPendingData = []; // Store globally for modal access
@@ -2856,7 +2871,7 @@ window.openPharmPatient = function(pid) {
 
 window.submitPharmBatch = async function(btn, pid) {
   const pRxs = window.pharmPendingData.filter(x => x.patient_id === pid);
-  const orig = btn.innerText; btn.innerText = 'Processing...'; btn.disabled = true;
+  const orig = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...'; btn.disabled = true;
   
   let paidItems = [];
   try {
@@ -2876,7 +2891,7 @@ window.submitPharmBatch = async function(btn, pid) {
   } catch (e) {
     toast(e.message);
   }
-  btn.innerText = orig; btn.disabled = false;
+  btn.innerHTML = orig; btn.disabled = false;
 }
 
 
@@ -3037,7 +3052,7 @@ function renderBilling(page) {
         <h3 style="margin:0;">Invoices & Billing Queue</h3>
         <div style="display:flex; gap:1rem;">
           <input type="text" placeholder="Search bills..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px;" oninput="filterTable('billTb', this.value)">
-          <button class="btn btn-outline" onclick="exportTableToCSV('billTb', 'billing_records.csv')">Export CSV</button>
+          <button class="btn btn-outline" onclick="exportTableToCSV('billTb', 'billing_records.csv', this)">Export CSV</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -3227,7 +3242,7 @@ function renderAdminData(container) {
           <option value="audit_logs">Audit Logs (System Activity)</option>
         </select>
         <button class="btn btn-primary" onclick="loadAdminDataTable()">Load Data</button>
-        <button class="btn btn-outline" onclick="exportTableToCSV('sysDataBody', 'system_data.csv')">Export CSV</button>
+        <button class="btn btn-outline" onclick="exportTableToCSV('sysDataBody', 'system_data.csv', this)">Export CSV</button>
         <input type="text" placeholder="Search records..." style="padding:0.5rem; border-radius:8px; border:1px solid #cbd5e1; min-width:250px; margin-left:auto;" oninput="filterTable('sysDataBody', this.value)">
       </div>
 
@@ -3491,18 +3506,24 @@ window.addUser = function() {
           <option value="Lab Scientist">Lab Scientist</option>
         </select>
         
-        <button class="btn btn-primary btn-block" style="padding:1rem;" onclick="submitAddUser()">Create User Account</button>
+        <button class="btn btn-primary btn-block" style="padding:1rem;" onclick="submitAddUser(this)">Create User Account</button>
       </div>
     </div>
   `);
 };
 
-window.submitAddUser = async function() {
+window.submitAddUser = async function(btn) {
   const name = document.getElementById('addUName').value;
   const email = document.getElementById('addUEmail').value;
   const password = document.getElementById('addUPass').value;
   const role = document.getElementById('addURole').value;
   
+  const origText = btn ? btn.innerHTML : 'Create User Account';
+  if (btn) {
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+    btn.disabled = true;
+  }
+
   try {
     const res = await apiFetch('/users', {
       method: 'POST',
@@ -3513,6 +3534,11 @@ window.submitAddUser = async function() {
     setAdminTab('users'); // Reload table
   } catch (err) {
     toast(err.message);
+  } finally {
+    if (btn) {
+      btn.innerHTML = origText;
+      btn.disabled = false;
+    }
   }
 };
 
@@ -3809,12 +3835,19 @@ window.startNetworkMonitor = function() {
 };
 
 
-window.exportReportsCSV = function() {
+window.exportReportsCSV = function(btn) {
   if (!window.reportDataCache) {
     toast('No data to export', 'error');
     return;
   }
-  const { chartData, diagnosisData } = window.reportDataCache;
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exporting...';
+    btn.disabled = true;
+  }
+  
+  setTimeout(() => {
+    const { chartData, diagnosisData } = window.reportDataCache;
   const revLabels = chartData.labels;
   const revData = chartData.revenue;
   const patientLabels = chartData.labels;
@@ -3850,6 +3883,12 @@ window.exportReportsCSV = function() {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+  
+  if (btn) {
+    btn.innerHTML = origText;
+    btn.disabled = false;
+  }
+  }, 100);
 };
 
 
