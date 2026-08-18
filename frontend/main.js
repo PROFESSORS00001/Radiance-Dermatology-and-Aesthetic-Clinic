@@ -16,7 +16,7 @@ window.filterTable = function(tbodyId, query) {
         row.style.display = 'none';
       }
     }
-  }, 150); // 150ms debounce
+  }, 300); // 300ms debounce
 }
 
 window.formatID = function(id, prefix) {
@@ -576,8 +576,12 @@ function renderAdminSettings(container) {
             <input type="text" id="admOmAgent" value="${sysSettings.om_agent_code || '123456'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
           </div>
           <div class="form-group span2" style="grid-column: span 2;">
-            <label style="color:#475569; font-weight:500;">Clinic Address</label>
+            <label style="color:#475569; font-weight:500;">Clinic Address (Location)</label>
             <input type="text" id="admClinicAddress" value="${sysSettings.clinic_address || '123 Health Ave, Freetown'}" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%;">
+          </div>
+          <div class="form-group span2" style="grid-column: span 2;">
+            <label style="color:#475569; font-weight:500;">About Clinic (Description for Patient App)</label>
+            <textarea id="admAboutClinic" rows="4" style="padding:0.75rem; border:1px solid #cbd5e1; border-radius:8px; width:100%; font-family:inherit;">${sysSettings.about_clinic || 'Welcome to Radiance Dermatology & Aesthetic Clinic...'}</textarea>
           </div>
           <div class="form-group">
             <label style="color:#475569; font-weight:500;">Start Time</label>
@@ -803,7 +807,7 @@ function renderReception(page) {
           <table>
             <thead><tr><th>Date & Time</th><th>Patient</th><th>Doctor</th><th>Purpose</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody id="upcomingAppsBody">
-              ${apps.map(a => `<tr>
+              ${apps.slice(0, 50).map(a => `<tr>
                 <td>${a.date} <br><small style="color:#64748b;">${a.time}</small></td>
                 <td><strong>${a.patient_name}</strong></td>
                 <td>${a.doctor_name || 'Any'}</td>
@@ -1740,7 +1744,7 @@ function renderDocQueue(container) {
     a.status === 'Awaiting Lab Results' || 
     a.status === 'Lab Results Received'
   );
-  document.getElementById('docAppTb').innerHTML = apps.map(a => `
+  document.getElementById('docAppTb').innerHTML = apps.slice(0, 50).map(a => `
     <tr>
       <td>${a.date} <br><small style="color:#64748b;">${a.time}</small></td>
       <td><strong>${a.patient_name}</strong></td>
@@ -1849,6 +1853,7 @@ function renderDocConsultation(container) {
   }
   
   const p = allPatients.find(x => x.id == activeConsPatId);
+  const appt = allAppointments.find(a => a.id === activeConsAppId) || {};
   const dOpts = pharmacyInventory.map(d => `<option value="${d.id}" data-name="${d.drug_name}" data-price="${d.price}">${d.drug_name}</option>`).join('');
   const labOpts = labCatalog.map(l => `<label class="checkbox-item"><input type="checkbox" name="c_lab" value="${l.id}" data-name="${l.test_name}" data-price="${l.price}"> ${l.test_name}</label>`).join('');
   const txOpts = treatmentCatalog.map(t => `<label class="checkbox-item"><input type="checkbox" name="c_tx" value="${t.id}" data-name="${t.treatment_name}" data-price="${t.price}"> ${t.treatment_name}</label>`).join('');
@@ -1856,6 +1861,17 @@ function renderDocConsultation(container) {
   window.bodyMapDots = [];
 
   container.innerHTML = `
+    <!-- INLINE PATIENT HISTORY -->
+    <div class="card" style="margin-bottom:1.5rem; background:#f0fdf4; border:1px solid #bbf7d0;">
+      <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="toggleInlineHistory()">
+        <h3 style="color:#166534; font-size:1.1rem; margin:0;"><i class="fas fa-history"></i> Past Clinical History</h3>
+        <span id="inlineHistoryToggleBtn" style="color:#166534;"><i class="fas fa-chevron-down"></i></span>
+      </div>
+      <div id="inlineHistoryContent" style="display:none; margin-top:1rem; padding-top:1rem; border-top:1px solid #bbf7d0;">
+        <div style="color:#166534; font-size:0.9rem;">Loading history...</div>
+      </div>
+    </div>
+
     <!-- SECTION 1: DEMOGRAPHIC INFO -->
     <div class="card" style="margin-bottom:1.5rem;">
       <h3 style="color:var(--primary); font-size:1.1rem; margin-bottom:1rem; text-transform:uppercase; letter-spacing:0.05em; border-bottom:2px solid var(--border-color); padding-bottom:0.5rem;"><i class="fas fa-id-card"></i> 1. Patient Demographics</h3>
@@ -1896,7 +1912,7 @@ function renderDocConsultation(container) {
       
       <div class="form-group">
         <label>Presenting Complaint</label>
-        <textarea id="cf_primary" rows="2" placeholder="Primary complaint described by the patient..."></textarea>
+        <textarea id="cf_primary" rows="2" placeholder="Primary complaint described by the patient...">${appt.purpose || ''}</textarea>
       </div>
 
       <div class="form-group">
@@ -2315,6 +2331,81 @@ window.startConsultation = function(appId, patId) {
   activeConsPatId = patId;
   setDocTab('consultation');
 }
+
+window.toggleInlineHistory = function() {
+  const content = document.getElementById('inlineHistoryContent');
+  const btn = document.getElementById('inlineHistoryToggleBtn');
+  if (content.style.display === 'none') {
+    content.style.display = 'block';
+    btn.innerHTML = '<i class="fas fa-chevron-up"></i>';
+    window.loadInlineHistory(activeConsPatId);
+  } else {
+    content.style.display = 'none';
+    btn.innerHTML = '<i class="fas fa-chevron-down"></i>';
+  }
+};
+
+window.loadInlineHistory = async function(patId) {
+  const content = document.getElementById('inlineHistoryContent');
+  if (content.dataset.loaded === 'true') return;
+  content.innerHTML = '<div style="color:#166534; font-size:0.9rem;">Loading history...</div>';
+  try {
+    const data = await apiFetch(`/patients/${patId}/history`);
+    if (data.consultations.length === 0) {
+      content.innerHTML = '<div style="color:#475569; font-size:0.95rem; font-style:italic;">No past clinical history found for this patient.</div>';
+      content.dataset.loaded = 'true';
+      return;
+    }
+    
+    let html = `
+      <div style="background:#f1f5f9; padding:0.75rem; border-radius:8px; margin-bottom:1rem; display:flex; gap:1rem; font-size:0.9rem;">
+        <div><strong>Consultations:</strong> ${data.consultations.length}</div>
+        <div><strong>Labs:</strong> ${data.labs.length}</div>
+        <div><strong>Prescriptions:</strong> ${data.prescriptions.length}</div>
+      </div>
+      <div style="overflow-y:auto; max-height:400px; padding-right:10px;">
+    `;
+    
+    data.consultations.forEach(c => {
+      const consRx = data.prescriptions.filter(rx => rx.consultation_id === c.id);
+      const consLabs = data.labs.filter(l => l.consultation_id === c.id);
+      const consTx = data.treatments.filter(t => t.consultation_id === c.id);
+      
+      html += `
+        <div style="border-left:4px solid var(--primary); padding-left:1rem; margin-bottom:1.5rem; background:#fff; padding:1rem; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:0.5rem; margin-bottom:0.5rem;">
+            <strong>${c.date}</strong>
+          </div>
+          <h4 style="color:var(--primary); margin-bottom:0.5rem; font-size:1rem;">${c.working_diagnosis || 'No Diagnosis Recorded'}</h4>
+          <p style="font-size:13px; color:#555; margin-bottom:1rem;"><strong>Notes:</strong> ${c.doctor_notes || c.primary_complaint || 'None'}</p>
+          
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+            <div>
+              <strong style="font-size:13px; color:#1e293b;">Medications:</strong>
+              <ul style="font-size:13px; margin:5px 0 0 15px; color:#475569;">
+                ${consRx.length ? consRx.map(r => `<li>${r.drug_name} - ${r.frequency} (${r.duration})</li>`).join('') : '<li>None</li>'}
+              </ul>
+            </div>
+            <div>
+              <strong style="font-size:13px; color:#1e293b;">Labs / Treatments:</strong>
+              <ul style="font-size:13px; margin:5px 0 0 15px; color:#475569;">
+                ${consLabs.map(l => `<li>Lab: ${l.test_name} - <em>${l.status}</em></li>`).join('')}
+                ${consTx.map(t => `<li>Tx: ${t.treatment_name}</li>`).join('')}
+                ${!consLabs.length && !consTx.length ? '<li>None</li>' : ''}
+              </ul>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += `</div>`;
+    content.innerHTML = html;
+    content.dataset.loaded = 'true';
+  } catch (err) {
+    content.innerHTML = `<div style="color:red; font-size:0.9rem;">Error loading history: ${err.message}</div>`;
+  }
+};
 
 window.submitFullConsultation = async function(btn, action) {
   const orig = btn.innerText; btn.innerText = 'Saving...'; btn.disabled = true;
@@ -3344,6 +3435,7 @@ window.updateSysSettings = async function(btn) {
     { key: 'clinic_contact', value: document.getElementById('admClinicContact').value },
     { key: 'clinic_email', value: document.getElementById('admClinicEmail').value },
     { key: 'clinic_address', value: document.getElementById('admClinicAddress').value },
+    { key: 'about_clinic', value: document.getElementById('admAboutClinic').value },
     { key: 'clinic_logo', value: window.tempBase64Logo || '' },
     { key: 'consultation_fee', value: document.getElementById('admConsFee').value },
     { key: 'om_agent_code', value: document.getElementById('admOmAgent').value },
@@ -3449,11 +3541,11 @@ window.openRescheduleModal = function(id, currentDate, currentTime) {
       <div class="modal-body">
         <div class="form-group">
           <label>New Date</label>
-          <input type="date" id="reschDate" value="${currentDate}" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid #cbd5e1;">
+          <input type="date" id="reschDate" value="${currentDate || ''}" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid #cbd5e1;">
         </div>
         <div class="form-group" style="margin-top:1rem;">
           <label>New Time</label>
-          <input type="time" id="reschTime" value="${currentTime}" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid #cbd5e1;">
+          <input type="time" id="reschTime" value="${currentTime || ''}" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid #cbd5e1;">
         </div>
         <button class="btn btn-primary btn-block" style="margin-top:1.5rem;" onclick="submitReschedule('${id}')">Confirm Reschedule</button>
       </div>
@@ -3461,10 +3553,15 @@ window.openRescheduleModal = function(id, currentDate, currentTime) {
   `);
 };
 
+window.rescheduleApp = function(id) {
+  window.openRescheduleModal(id, '', '');
+};
+
 window.submitReschedule = async function(id) {
   const newDate = document.getElementById('reschDate').value;
   const newTime = document.getElementById('reschTime').value;
-  if (!newDate || !newTime) return toast('Please select date and time');
+  
+  if (!newDate || !newTime) return toast('Please select both a date and a time.');
   
   toast('Rescheduling...');
   try {
@@ -3472,46 +3569,19 @@ window.submitReschedule = async function(id) {
       method: 'PATCH',
       body: JSON.stringify({ status: 'Rescheduled', new_date: newDate, new_time: newTime })
     });
-    allAppointments = await apiFetch('/appointments');
-    closeModal();
-    renderReception(document.getElementById('mainContent'));
-    toast('Appointment Rescheduled Successfully');
-  } catch(err) {
-    toast(err.message);
-  }
-};
-
-window.rescheduleApp = function(id) {
-  showModal(`
-    <div class="modal">
-      <div class="modal-header"><h3>Reschedule Appointment</h3><button class="close-btn" onclick="closeModal()">&times;</button></div>
-      <div class="modal-body">
-        <label>New Date</label>
-        <input type="date" id="reschedDate" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid #cbd5e1; margin-bottom:1rem;" />
-        
-        <label>New Time</label>
-        <input type="time" id="reschedTime" style="width:100%; padding:0.75rem; border-radius:8px; border:1px solid #cbd5e1; margin-bottom:1.5rem;" />
-        
-        <button class="btn btn-primary btn-block" style="padding:1rem;" onclick="submitReschedule('${id}')">Save New Schedule</button>
-      </div>
-    </div>
-  `);
-};
-
-window.submitReschedule = async function(id) {
-  const newDate = document.getElementById('reschedDate').value;
-  const newTime = document.getElementById('reschedTime').value;
-  
-  if (!newDate || !newTime) return toast('Please select both a date and a time.');
-  
-  try {
-    await apiFetch(`/appointments/${id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: 'Rescheduled', new_date: newDate, new_time: newTime })
-    });
+    
+    // Refresh all arrays that might have appointments
+    if (typeof allAppointments !== 'undefined') {
+        allAppointments = await apiFetch('/appointments');
+    }
+    
     toast('Appointment rescheduled successfully!');
     closeModal();
-    nav('reception');
+    
+    // Refresh the currently active view based on global router
+    const mainContent = document.getElementById('mainContent');
+    if (window.route === 'admin') renderAdmin(mainContent);
+    else if (window.route === 'reception') renderReception(mainContent);
   } catch (err) {
     toast(err.message);
   }

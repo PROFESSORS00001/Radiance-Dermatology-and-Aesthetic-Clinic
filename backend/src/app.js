@@ -40,7 +40,7 @@ app.get('/api/public/branding', async (req, res) => {
     const snap = await db.collection('settings').get();
     const data = {};
     snap.docs.forEach(d => {
-      if (['clinic_name', 'clinic_logo', 'om_agent_code', 'consultation_fee', 'clinic_policy'].includes(d.id)) {
+      if (['clinic_name', 'clinic_logo', 'om_agent_code', 'consultation_fee', 'clinic_policy', 'clinic_address', 'clinic_contact', 'clinic_email', 'about_clinic'].includes(d.id)) {
         data[d.id] = d.data().value;
       }
     });

@@ -155,7 +155,7 @@ router.post('/', async (req, res) => {
         if (pat.email) {
           const emailHtml = `
             <h2>Consultation Completed</h2>
-            <p>Dear ${pat.full_name},</p>
+            <p>Dear ${pat.name},</p>
             <p>Your consultation with the doctor has been completed. Your medical records, prescriptions, and invoice have been updated in your file.</p>
             <p>If you have any pending payments or prescriptions to collect, please visit the Reception/Pharmacy.</p>
             <br>
