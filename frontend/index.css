@@ -6,7 +6,7 @@
   --secondary: #ec4899;
   --card-bg: rgba(255, 255, 255, 0.75);
   --card-border: rgba(255, 255, 255, 0.3);
-  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  --glass-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   --sidebar-width: 260px;
   --sidebar-bg: #1e1e2f;
   --sidebar-text: #e2e8f0;
@@ -54,7 +54,7 @@ body {
   font-size: 1rem;
   font-family: 'Outfit', sans-serif;
   background: rgba(255,255,255,0.9);
-  transition: all 0.3s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
   outline: none;
@@ -259,7 +259,6 @@ body {
   border-radius: 12px;
   padding: 1.5rem;
   margin-bottom: 2rem;
-  animation: slideUp 0.5s ease-out;
 }
 
 table {
