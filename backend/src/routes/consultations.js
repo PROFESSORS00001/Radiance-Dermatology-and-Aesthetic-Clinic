@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../firebase');
 const { resolvePatientAndDoctorNames } = require('../resolver');
-const { sendEmail } = require('../email_service');
+const { sendEmail } = require('../mailer');
 
 router.get('/', async (req, res) => {
   try {

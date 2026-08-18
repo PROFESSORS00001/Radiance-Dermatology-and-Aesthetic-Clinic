@@ -1,6 +1,6 @@
 {
   "name": "dermatology-clinic-system",
-  "version": "1.2.1",
+  "version": "1.2.3",
   "description": "DCMS Dermatology Clinic Management System",
   "main": "main.js",
   "scripts": {
