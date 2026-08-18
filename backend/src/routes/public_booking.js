@@ -91,7 +91,7 @@ router.get('/availability', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { name, phone, email, date, time, purpose, payment_consent } = req.body;
+  const { name, phone, email, age, date, time, purpose, payment_consent } = req.body;
   if (!name || !phone || !date || !time || !payment_consent) {
     return res.status(400).json({ error: 'Name, phone, date, time, and payment consent are required' });
   }
@@ -111,6 +111,10 @@ router.post('/', async (req, res) => {
     const nameCheck = await patientsRef.where('name', '==', name).get();
     if (!nameCheck.empty) {
       patientId = nameCheck.docs[0].id;
+      // Update age if provided
+      if (age) {
+        await patientsRef.doc(patientId).set({ age: age }, { merge: true });
+      }
     }
 
     if (!patientId) {
@@ -124,7 +128,7 @@ router.post('/', async (req, res) => {
       });
 
       await patientsRef.doc(patientId).set({
-        name, phone, email: email || '', gender: 'Unknown', dob: '', address: '',
+        name, phone, email: email || '', age: age || '', gender: 'Unknown', dob: '', address: '',
         patient_id: patientId,
         created_at: new Date().toISOString()
       });
