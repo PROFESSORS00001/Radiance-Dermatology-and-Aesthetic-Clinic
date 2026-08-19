@@ -1,6 +1,14 @@
 const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3000/api' : '/api';
 
-window.searchTimeout = null;
+// Kill any rogue service workers from the patient app
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+    for(let registration of registrations) {
+      registration.unregister();
+    }
+  });
+}
+
 window.filterTable = function(tbodyId, query) {
   if (window.searchTimeout) clearTimeout(window.searchTimeout);
   window.searchTimeout = setTimeout(() => {

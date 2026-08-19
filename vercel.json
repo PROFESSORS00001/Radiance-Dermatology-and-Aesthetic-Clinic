@@ -19,6 +19,11 @@
       "source": "/admin",
       "destination": "/admin/",
       "permanent": true
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/dashboard/",
+      "permanent": true
     }
   ],
   "routes": [
@@ -36,6 +41,18 @@
     },
     {
       "src": "/admin(.*)",
+      "dest": "frontend/dist/index.html"
+    },
+    {
+      "src": "/dashboard/assets/(.*)",
+      "dest": "frontend/dist/assets/$1"
+    },
+    {
+      "src": "/dashboard/(.*\\..*)",
+      "dest": "frontend/dist/$1"
+    },
+    {
+      "src": "/dashboard(.*)",
       "dest": "frontend/dist/index.html"
     },
     {
