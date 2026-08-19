@@ -8,12 +8,31 @@
     {
       "src": "patient-app/**",
       "use": "@vercel/static"
+    },
+    {
+      "src": "frontend/dist/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/admin",
+      "destination": "/admin/",
+      "permanent": true
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "backend/src/app.js"
+    },
+    {
+      "src": "/admin/(.*)",
+      "dest": "frontend/dist/$1"
+    },
+    {
+      "src": "/admin/",
+      "dest": "frontend/dist/index.html"
     },
     {
       "src": "/(.*)",
